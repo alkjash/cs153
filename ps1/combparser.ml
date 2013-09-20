@@ -17,7 +17,8 @@ let rec make_exp_parser (():unit) : (token, exp) parser =
   alts [binop_parser; first_parser]
 and make_binop_rest (():unit) : (token, (binop * exp)) parser =
   let binop_op_parser = satisfy_opt (function 
-    PLUS -> Some Plus | MINUS -> Some Minus | STAR -> Some Times | SLASH -> Some Div | _ -> None) in
+    PLUS -> Some Plus | MINUS -> Some Minus | 
+	STAR -> Some Times | SLASH -> Some Div | EQ -> Some Eq | _ -> None) in
   lazy_seq (lazy binop_op_parser, lazy (make_exp_parser ()))
 
 let rec make_stmt_parser (():unit) : (token, stmt) parser =
