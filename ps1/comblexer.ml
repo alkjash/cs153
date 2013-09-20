@@ -48,10 +48,10 @@ let rec tokenize(cs:char list) : token list =
   let and_parser = const_map AND (str "&&") in
   let or_parser = const_map OR (str "||") in
 
-  let if_parser = const_map IF (str "if") in
-  let else_parser = const_map ELSE (str "else") in
-  let while_parser = const_map WHILE (str "while") in
-  let for_parser = const_map FOR (str "for") in
+  let keywords = [("if", IF), ("else", ELSE), ("while", WHILE), ("for", FOR)] in
+  let str_parser = map (fun s -> 
+	try List.assoc s keywords
+	with Not_found -> VAR s) identifier in
 
   let lbrace_parser = const_map LBRACE (c '{') in
   let rbrace_parser = const_map RBRACE (c '}') in
@@ -72,8 +72,7 @@ let rec tokenize(cs:char list) : token list =
     plus_parser; minus_parser; star_parser; slash_parser;
 	eq_parser; not_parser; less_parser; greater_parser;
 	and_parser; or_parser; lbrace_parser; rbrace_parser;
-	if_parser; else_parser; while_parser; for_parser;
-    lparen_parser; rparen_parser; return_parser; semi_parser] in
+	str_parser; lparen_parser; rparen_parser; return_parser; semi_parser] in
   let p = seq (star (alts all_tokens), eof_parser) in
   match run (p cs) with
    | Some (tokens, EOF) -> remove_whitespace tokens
