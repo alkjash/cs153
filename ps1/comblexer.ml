@@ -27,7 +27,7 @@ let remove_whitespace (ts: token list) : token list =
  * Fish tokens using the combinators. *)
 let rec tokenize(cs:char list) : token list = 
   let int_parser = map (fun i -> INT i) integer in
-
+  
   let plus_parser = const_map PLUS (c '+') in
   let minus_parser = const_map MINUS (c '-')  in
   let star_parser = const_map STAR (c '*')  in
@@ -48,6 +48,11 @@ let rec tokenize(cs:char list) : token list =
   let and_parser = const_map AND (str "&&") in
   let or_parser = const_map OR (str "||") in
 
+  let if_parser = const_map IF (str "if") in
+  let else_parser = const_map ELSE (str "else") in
+  let while_parser = const_map WHILE (str "while") in
+  let for_parser = const_map FOR (str "for") in
+
   let lbrace_parser = const_map LBRACE (c '{') in
   let rbrace_parser = const_map RBRACE (c '}') in
 
@@ -67,6 +72,7 @@ let rec tokenize(cs:char list) : token list =
     plus_parser; minus_parser; star_parser; slash_parser;
 	eq_parser; not_parser; less_parser; greater_parser;
 	and_parser; or_parser; lbrace_parser; rbrace_parser;
+	if_parser; else_parser; while_parser; for_parser;
     lparen_parser; rparen_parser; return_parser; semi_parser] in
   let p = seq (star (alts all_tokens), eof_parser) in
   match run (p cs) with
