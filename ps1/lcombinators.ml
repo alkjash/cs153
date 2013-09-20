@@ -204,4 +204,3 @@ struct
   (* [str "foo"] matches the string "foo" *)
   let str(s:string) : (char,unit) parser = unit(list(List.map c (explode s)))
 end
-

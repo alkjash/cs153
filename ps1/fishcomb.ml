@@ -10,6 +10,7 @@ let parse_stream stream =
   let _ = really_input stream s 0 size in
   let cs = explode s in
   let tokens = Comblexer.tokenize cs in
+  let _ = Comblexer.print_tokens tokens in
   let ast = Combparser.parse tokens in 
   ast
     

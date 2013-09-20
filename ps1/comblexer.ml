@@ -1,5 +1,6 @@
 open Lcombinators.GenericParsing
 open Lcombinators.CharParsing
+open Explode
 open Ast
 
 (* the datatype for tokens -- you will need to augment these *)
@@ -17,6 +18,44 @@ type token =
   | SEMI
   | RETURN
   | EOF
+
+let token2string t =
+  match t with
+    INT i -> string_of_int i
+  | VAR x -> x
+  | PLUS -> "+"
+  | MINUS -> "-"
+  | STAR -> "*"
+  | SLASH -> "/"
+  | EQ -> "=="
+  | NEQ -> "!="
+  | LT -> "<"
+  | LTE -> "<="
+  | GT -> ">"
+  | GTE -> ">="
+  | NOT -> "!"
+  | AND -> "&&"
+  | OR -> "||"
+  | ASSIGN -> "="
+  | IF -> "if"
+  | ELSE -> "else"
+  | WHILE -> "while"
+  | FOR -> "for"
+  | LBRACE -> "{"
+  | RBRACE -> "}"
+  | WHITESPACE -> " "
+  | COMMENT -> "/* -- comment -- */"
+  | SEMI -> ";"
+  | RETURN -> "return"
+  | LPAREN -> "("
+  | RPAREN -> ")"
+  | EOF -> "<end-of-file>"
+
+let rec print_tokens (ts: token list) : token list = 
+  match ts with
+	[] -> []
+  | h::t -> let _ = print_string (token2string h ^ " ") in
+	print_tokens t
 
 (* removes WHITESPACE and COMMENT tokens from a token list *)
 let remove_whitespace (ts: token list) : token list =
@@ -37,7 +76,7 @@ let rec tokenize(cs:char list) : token list =
 	 Constructs parser that matches either x followed by =, returning y, or
 	 Else matches x and returns z *)
   let helper (x: char) (y: token) (z: token) = map (fun pair -> match pair with
-	(x, Some '=') -> y
+	  (x, Some '=') -> y
 	| _ -> z)
 	(seq (c x, opt (c '='))) in
   let eq_parser = helper '=' EQ ASSIGN in
@@ -48,10 +87,18 @@ let rec tokenize(cs:char list) : token list =
   let and_parser = const_map AND (str "&&") in
   let or_parser = const_map OR (str "||") in
 
-  let keywords = [("if", IF), ("else", ELSE), ("while", WHILE), ("for", FOR)] in
+  (* Fish identifier parser: different from CharParsing.identifier which accepts
+	 underscore as the first character *)
+  let fish_identifier = 
+    map implode (cons (alpha,
+                       star (alts [alpha; dig; underscore]))) in
+
+  (* Lexing a generic string: either a Fish keyword or else a variable identifier *)
+  let keywords = [("if", IF); ("else", ELSE); 
+	("while", WHILE); ("for", FOR); ("return", RETURN)] in
   let str_parser = map (fun s -> 
 	try List.assoc s keywords
-	with Not_found -> VAR s) identifier in
+	with Not_found -> VAR s) fish_identifier in
 
   let lbrace_parser = const_map LBRACE (c '{') in
   let rbrace_parser = const_map RBRACE (c '}') in
