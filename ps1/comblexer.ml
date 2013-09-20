@@ -1,10 +1,17 @@
 open Lcombinators.GenericParsing
 open Lcombinators.CharParsing
+open Ast
 
 (* the datatype for tokens -- you will need to augment these *)
 type token = 
     INT of int 
-  | PLUS | MINUS | STAR | SLASH
+  | VAR of Ast.var
+  | PLUS | MINUS | TIMES | DIV | STAR | SLASH
+  | EQ | NEQ | LT | LTE | GT | GTE
+  | NOT | AND | OR
+  | ASSIGN
+  | IF | ELSE | WHILE | FOR
+  | LBRACE | RBRACE
   | LPAREN | RPAREN
   | WHITESPACE | COMMENT 
   | SEMI
