@@ -33,7 +33,23 @@ let rec tokenize(cs:char list) : token list =
   let star_parser = const_map STAR (c '*')  in
   let slash_parser = const_map SLASH (c '/')  in
 
-  let eq_parser = const_map EQ (seq (c '=', c '=')) in
+  (* Helper for constructing parsers for <, <=, etc.
+	 Constructs parser that matches either x followed by =, returning y, or
+	 Else matches x and returns z *)
+  let helper (x: char) (y: token) (z: token) = map (fun pair -> match pair with
+	(x, Some '=') -> y
+	| _ -> z)
+	(seq (c x, opt (c '='))) in
+  let eq_parser = helper '=' EQ ASSIGN in
+  let not_parser = helper '!' NEQ NOT in
+  let less_parser = helper '<' LTE LT in
+  let greater_parser = helper '>' GTE GT in
+
+  let and_parser = const_map AND (str "&&") in
+  let or_parser = const_map OR (str "||") in
+
+  let lbrace_parser = const_map LBRACE (c '{') in
+  let rbrace_parser = const_map RBRACE (c '}') in
 
   let lparen_parser = const_map LPAREN (c '(') in
   let rparen_parser = const_map RPAREN (c ')') in
@@ -45,11 +61,12 @@ let rec tokenize(cs:char list) : token list =
 
   let return_parser = const_map RETURN (str "return") in
 
-  let eof_parser = map (fun _ -> EOF) eof in
+  let eof_parser = const_map EOF eof in
 
   let all_tokens = [int_parser; ws_parser; comment_parser; 
     plus_parser; minus_parser; star_parser; slash_parser;
-	eq_parser;
+	eq_parser; not_parser; less_parser; greater_parser;
+	and_parser; or_parser; lbrace_parser; rbrace_parser;
     lparen_parser; rparen_parser; return_parser; semi_parser] in
   let p = seq (star (alts all_tokens), eof_parser) in
   match run (p cs) with
