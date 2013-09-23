@@ -126,6 +126,8 @@ struct
   (* [unit p] matches when [p] does, but maps the result to the dummy value () *)
   let unit(p:('c,'a) parser) : ('c,unit) parser = map (fun _ -> ()) p
 
+  (* Find complete match in parsed output, which is a list of
+     partial parses, and return it *)
   let rec run (llst:('a * ('c list)) llist) : 'a option =
     match llst with
       | Cons((v, []), _) -> Some v

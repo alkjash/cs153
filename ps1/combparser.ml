@@ -21,6 +21,8 @@ and make_binop_rest (():unit) : (token, (binop * exp)) parser =
 	STAR -> Some Times | SLASH -> Some Div | EQ -> Some Eq | _ -> None) in
   lazy_seq (lazy binop_op_parser, lazy (make_exp_parser ()))
 
+(* Constructs a statement parser, which either matches a return statement or
+   a normal statement, which we construct using make_exp_parser *)
 let rec make_stmt_parser (():unit) : (token, stmt) parser =
   let return_parser = seq (satisfy (fun t -> t == RETURN), lazy_seq (lazy (make_exp_parser ()), 
     lazy (satisfy (fun t -> t == SEMI)))) in
@@ -28,6 +30,8 @@ let rec make_stmt_parser (():unit) : (token, stmt) parser =
   let exp_stmt_parser = map (fun e -> (Exp e, dummy_pos)) (make_exp_parser ()) in
   alts [return_stmt_parser; exp_stmt_parser]
 
+(* Constructs parser using make_stmt_parser, computes it on a list of tokens, and
+   returns some complete parse matching the token list if it exists *)
 let parse(ts:token list) : program = 
   let program_parser = make_stmt_parser () in
   match run (program_parser ts) with
