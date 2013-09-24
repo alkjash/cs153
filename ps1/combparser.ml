@@ -36,7 +36,37 @@ let rec make_stmt_parser (():unit) : (token, stmt) parser =
 
 (* Parses a statement of the form Exp, If-Else, While, For, Return, { stmt } *)
 let rec make_astmt_parser (():unit) : (token, stmt) parser =
-  raise TODO
+  let if_parser =
+    list[satisfy (fun t -> t == IF), satisfy (fun t -> t == LPAREN),
+          lazy_seq (lazy (make_exp_parser ()), (lazy_seq (lazy (satisfy (fun t -> t == RPAREN)),
+          lazy (make_stmt_parser ()))))] in
+  let if_astmt_parser = map (fun (_, (_, (e, (_, s)))) -> ((If (e,s,skip)), dummy_pos)) if_parser in
+  let if_else_parser =
+    list[satisfy (fun t -> t == IF), satisfy (fun t -> t == LPAREN),
+          lazy_seq (lazy (make_exp_parser ()), (lazy_seq (lazy (satisfy (fun t -> t == RPAREN)),
+          (lazy_seq (lazy (make_stmt_parser ()), (lazy_seq (lazy (satisfy (fun t -> t == ELSE)),
+          (lazy (make_stmt_parser ())))))))))] in
+  let if_else_astmt_parser = map (fun (_, (_, (e, (_, (s1, (_, s2)))))) -> ((If (e,s,s2)), dummy_pos)) if_else_parser in
+  let while_parser =
+    list[satisfy (fun t -> t == WHILE), satisfy (fun t -> t == LPAREN),
+          lazy_seq (lazy (make_exp_parser ()), (lazy_seq (lazy (satisfy (fun t -> t == RPAREN)),
+          (lazy_seq (lazy (make_stmt_parser ()), lazy (satisfy (fun t -> t == SEMI)))))))] in
+  let while_astmt_parser = map (fun (_, (_, (e, (_, (s, _))))) -> ((While (e,s)), dummy_pos)) while_parser in
+  let for_parser =
+    list[satisfy (fun t -> t == FOR), satisfy (fun t -> t == LPAREN),
+          lazy_seq (lazy (make_exp_parser ()), (lazy_seq (lazy (satisfy (fun t -> t == SEMI)), 
+          (lazy_seq (lazy (make_exp_parser ()), (lazy_seq (lazy (satisfy (fun t -> t == SEMI)),
+          (lazy_seq (lazy make_exp_parser (), (lazy_seq (lazy (satisfy (fun t -> t == RPAREN)),
+          (lazy_seq (lazy (make_stmt_parser ()), lazy (satisfy (fun t -> t == SEMI)))))))))))))))] in
+  let for_astmt_parser = map (fun (_, (_, (e1, (_, (e2, (_, (e3, (_, (s, _))))))))) ->
+    ((For (e1,e2,e3,s)), dummy_pos)) for_parser in
+  (* what to do for empty while & for statements? *)
+  let return_parser = seq (satisfy (fun t -> t == RETURN), lazy_seq (lazy (make_exp_parser ()), 
+    lazy (satisfy (fun t -> t == SEMI)))) in
+  let return_stmt_parser = map (fun (_, (e, _)) -> ((Return e), dummy_pos)) return_parser in
+  alts [if_parser; if_else_parser; while_parser; for_parser; return_parser]
+
+
 
 (* Make parser at the statement level: parses a sequence of astmts into Seq(astmt, stmt) *)
 let rec make_stmt_parser (():unit) : (token, stmt) parser =
