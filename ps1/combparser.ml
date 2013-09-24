@@ -34,16 +34,21 @@ let rec make_stmt_parser (():unit) : (token, stmt) parser =
   alts [return_stmt_parser; exp_stmt_parser]
 *)
 
-(* Parses a statement of the form Exp, If-Else, While, For, Return, { stmt } *)
+(* Parses a statement of the form Exp, If-Else, While, For, Return, { stmt } 
+   Does not match the empty list to guarantee that make_stmt_parser doesn't go into
+   infinite loop *)
 let rec make_astmt_parser (():unit) : (token, stmt) parser =
   raise TODO
 
-(* Make parser at the statement level: parses a sequence of astmts into Seq(astmt, stmt) *)
+(* Make parser at the statement level: parses a sequence of astmts into Seq(astmt, stmt) 
+   Adds in a skip at the end of the program after parsing the EOF *)
 let rec make_stmt_parser (():unit) : (token, stmt) parser =
-  let stmt_parser = lazy_seq (lazy (make_astmt_parser ()), lazy (opt (make_stmt_parser ()))) in
-  let mult_stmt_parser = map (fun (a, b) -> match b with 
-	  Some c -> Seq (a, c)
-	| None -> a) stmt_parser
+  (* Parse recursively for >= 1 astmt *)
+  let stmt_parser = lazy_seq (lazy (make_astmt_parser ()), lazy (make_stmt_parser ())) in
+  let mult_stmt_parser = map (fun (a, b) -> (Seq (a, b), dummy_pos)) stmt_parser in	
+  (* Parse no statements *)
+  let eof_parser = const_map (skip, dummy_pos) (satisfy (fun t -> t == EOF)) in
+	alts [mult_stmt_parser; eof_parser]
 
 (* Constructs parser using make_stmt_parser, computes it on a list of tokens, and
    returns some complete parse matching the token list if it exists *)
