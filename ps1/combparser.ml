@@ -128,28 +128,27 @@ and make_astmt_parser (():unit) : (token, stmt) parser =
   let exp_parser = raise TODO in
   let braces_parser = raise TODO in
   let if_parser =
-    ls (tok IF, ls (tok LPAREN, ls (make_exp_parser (), ls (tok RPAREN, make_stmt_parser ())))) in
+    ls (tok IF, ls (tok LPAREN, ls (make_exp_parser (), ls (tok RPAREN, make_astmt_parser ())))) in
   let if_astmt_parser = 
 	map (fun (_, (_, (e, (_, s)))) -> (If (e,s,dummy_stmt), dummy_pos)) if_parser in
   let if_else_parser =
     ls (tok IF, ls (tok LPAREN, ls (make_exp_parser (), ls (tok RPAREN,
-          ls (make_stmt_parser (), ls (tok ELSE, make_stmt_parser ())))))) in
+          ls (make_stmt_parser (), ls (tok ELSE, make_astmt_parser ())))))) in
   let if_else_astmt_parser = 
 	map (fun (_, (_, (e, (_, (s1, (_, s2)))))) -> ((If (e,s1,s2)), dummy_pos)) if_else_parser in
   let while_parser =
     ls (tok WHILE, ls (tok LPAREN,
           ls (make_exp_parser (), ls (tok RPAREN,
-          ls (make_stmt_parser (), tok SEMI))))) in
+          make_astmt_parser ())))) in
   let while_astmt_parser = map (fun (_, (_, (e, (_, (s, _))))) -> ((While (e,s)), dummy_pos)) while_parser in
   let for_parser =
     ls (tok FOR, ls (tok LPAREN,
-          ls (make_exp_parser (), ls (tok SEMI, 
-          ls (make_exp_parser (), ls (tok SEMI,
-          ls (make_exp_parser (), ls (tok RPAREN,
-          ls (make_stmt_parser (), tok SEMI))))))))) in
+          ls (opt (make_exp_parser ()), ls (tok SEMI, 
+          ls (opt (make_exp_parser ()), ls (tok SEMI,
+          ls (opt (make_exp_parser ()), ls (tok RPAREN,
+          make_astmt_parser ())))))))) in
   let for_astmt_parser = map (fun (_, (_, (e1, (_, (e2, (_, (e3, (_, (s, _))))))))) ->
     ((For (e1,e2,e3,s)), dummy_pos)) for_parser in
-  (* what to do for empty while & for statements? *)
   let return_parser = seq (tok RETURN, ls (make_exp_parser (), 
     tok SEMI)) in
   let return_stmt_parser = map (fun (_, (e, _)) -> ((Return e), dummy_pos)) return_parser in
