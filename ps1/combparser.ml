@@ -8,40 +8,13 @@ exception TODO
 exception FatalError
 
 let dummy_pos : pos = 0
+let dummy_stmt : stmt = (skip, dummy_pos)
 
-(*
-let rec make_exp_parser (():unit) : (token, exp) parser =
-  let int_parser = satisfy_opt (function INT i -> Some (Int i, dummy_pos) | _ -> None) in
-  let sub_parser = seq (satisfy (fun t -> t == LPAREN), 
-    ls (lazy (make_exp_parser ()), lazy (satisfy (fun t -> t == RPAREN)))) in 
-  let sub_exp_parser = map (fun (_, (e, _)) -> e) sub_parser in
-  let first_parser = alt (int_parser, sub_exp_parser) in
-  let rest_parser = seq (first_parser, make_binop_rest ()) in
-  let binop_parser = map (fun (e1, (op, e2)) -> (Binop (e1, op, e2), dummy_pos)) rest_parser in
-  alts [binop_parser; first_parser]
-and make_binop_rest (():unit) : (token, (binop * exp)) parser =
-  let binop_op_parser = satisfy_opt (function 
-    PLUS -> Some Plus | MINUS -> Some Minus | 
-	STAR -> Some Times | SLASH -> Some Div | EQ -> Some Eq | _ -> None) in
-  ls (lazy binop_op_parser, lazy (make_exp_parser ()))
-
-*)
-
-(*
-(* Constructs a statement parser, which either matches a return statement or
-   a normal statement, which we construct using make_exp_parser *)
-let rec make_stmt_parser (():unit) : (token, stmt) parser =
-  let return_parser = seq (satisfy (fun t -> t == RETURN), ls (lazy (make_exp_parser ()), 
-    lazy (satisfy (fun t -> t == SEMI)))) in
-  let return_stmt_parser = map (fun (_, (e, _)) -> ((Return e), dummy_pos)) return_parser in
-  let exp_stmt_parser = map (fun e -> (Exp e, dummy_pos)) (make_exp_parser ()) in
-  alts [return_stmt_parser; exp_stmt_parser]
-*)
-
-(* New combinator function: matches a specified token and consumes it *)
+(* New combinator functions *)
+(* [tok t] matches and consumes a token t *)
 let tok (t : token) : (token, token) parser = satisfy (fun h -> t = h) 
 
-(* Shorthand for ls (lazy p1, lazy p2) *)
+(* Shorthand for lazy_seq (lazy p1, lazy p2) *)
 let ls ((p1 : ('c, 'a) parser), (p2 : ('c, 'b) parser)) : ('c, 'a * 'b) parser =
   lazy_seq (lazy p1, lazy p2)
 
@@ -157,7 +130,7 @@ and make_astmt_parser (():unit) : (token, stmt) parser =
   let if_parser =
     ls (tok IF, ls (tok LPAREN, ls (make_exp_parser (), ls (tok RPAREN, make_stmt_parser ())))) in
   let if_astmt_parser = 
-	map (fun (_, (_, (e, (_, s)))) -> (If (e,s,(skip, dummy_pos)), dummy_pos)) if_parser in
+	map (fun (_, (_, (e, (_, s)))) -> (If (e,s,dummy_stmt), dummy_pos)) if_parser in
   let if_else_parser =
     ls (tok IF, ls (tok LPAREN, ls (make_exp_parser (), ls (tok RPAREN,
           ls (make_stmt_parser (), ls (tok ELSE, make_stmt_parser ())))))) in
@@ -190,7 +163,7 @@ and make_stmt_parser (() : unit) : (token, stmt) parser =
   let stmt_parser = ls (make_astmt_parser (), make_stmt_parser ()) in
   let mult_stmt_parser = map (fun (a, b) -> (Seq (a, b), dummy_pos)) stmt_parser in	
   (* Parse no statements *)
-  let eof_parser = const_map (skip, dummy_pos) (tok EOF) in
+  let eof_parser = const_map dummy_stmt (tok EOF) in
 	alts [mult_stmt_parser; eof_parser]
 
 (* Constructs parser using make_stmt_parser, computes it on a list of tokens, and
