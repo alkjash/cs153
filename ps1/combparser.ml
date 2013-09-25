@@ -126,9 +126,11 @@ and make_exp_parser (() : unit) : (token, exp) parser =
    infinite loop *)
 and make_astmt_parser (():unit) : (token, stmt) parser =
   let exp_parser = ls (make_exp_parser (), tok SEMI) in
-  let exp_astmt_parser = map (fun (e, _) -> (Exp (e), dummy_pos) exp_parser in
-  let braces_parser = ls (tok LBRACES, ls(make_stmt_parser, tok RBRACES)) in
-  let if_parser = map (fun (_, (s, _)) -> (Seq (s, skip), dummy_pos)) braces_parser in
+  let exp_astmt_parser = map (fun (e, _) -> (Exp (e), dummy_pos)) exp_parser in
+  let braces_parser = ls (tok LBRACE, ls (make_stmt_parser (), tok RBRACE)) in
+  let braces_astmt_parser = 
+	map (fun (_, (s, _)) -> s) braces_parser in
+  let if_parser = 
     ls (tok IF, ls (tok LPAREN, ls (make_exp_parser (), ls (tok RPAREN, make_astmt_parser ())))) in
   let if_astmt_parser = 
 	map (fun (_, (_, (e, (_, s)))) -> (If (e,s,dummy_stmt), dummy_pos)) if_parser in
@@ -141,19 +143,25 @@ and make_astmt_parser (():unit) : (token, stmt) parser =
     ls (tok WHILE, ls (tok LPAREN,
           ls (make_exp_parser (), ls (tok RPAREN,
           make_astmt_parser ())))) in
-  let while_astmt_parser = map (fun (_, (_, (e, (_, (s, _))))) -> ((While (e,s)), dummy_pos)) while_parser in
+  let while_astmt_parser = map (fun (_, (_, (e, (_, s)))) -> (While (e,s), dummy_pos)) while_parser in
   let for_parser =
     ls (tok FOR, ls (tok LPAREN,
           ls (opt (make_exp_parser ()), ls (tok SEMI, 
-          ls (opt (make_exp_parser ()), ls (tok SEMI,
+          ls (make_exp_parser (), ls (tok SEMI,
           ls (opt (make_exp_parser ()), ls (tok RPAREN,
           make_astmt_parser ())))))))) in
-  let for_astmt_parser = map (fun (_, (_, (e1, (_, (e2, (_, (e3, (_, (s, _))))))))) ->
-    ((For (e1,e2,e3,s)), dummy_pos)) for_parser in
+  let for_astmt_parser = map (fun (_, (_, (e1, (_, (e2, (_, (e3, (_, s)))))))) ->
+	let e1 = match e1 with 
+	  Some x -> x 
+	| _ -> (Int 0, dummy_pos) in
+	let e3 = match e3 with 
+	  Some x -> x 
+	| _ -> (Int 0, dummy_pos) in
+    (For (e1,e2,e3,s), dummy_pos)) for_parser in
   let return_parser = seq (tok RETURN, ls (make_exp_parser (), 
     tok SEMI)) in
   let return_stmt_parser = map (fun (_, (e, _)) -> ((Return e), dummy_pos)) return_parser in
-  alts [exp_parser; braces_parser; if_astmt_parser; if_else_astmt_parser; 
+  alts [exp_astmt_parser; braces_astmt_parser; if_astmt_parser; if_else_astmt_parser; 
 	while_astmt_parser; for_astmt_parser; return_stmt_parser]
 
 (* Make parser at the statement level: parses a sequence of astmts into Seq(astmt, stmt) 
