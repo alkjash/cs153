@@ -125,9 +125,10 @@ and make_exp_parser (() : unit) : (token, exp) parser =
    Does not match the empty list to guarantee that make_stmt_parser doesn't go into
    infinite loop *)
 and make_astmt_parser (():unit) : (token, stmt) parser =
-  let exp_parser = raise TODO in
-  let braces_parser = raise TODO in
-  let if_parser =
+  let exp_parser = ls (make_exp_parser (), tok SEMI) in
+  let exp_astmt_parser = map (fun (e, _) -> (Exp (e), dummy_pos) exp_parser in
+  let braces_parser = ls (tok LBRACES, ls(make_stmt_parser, tok RBRACES)) in
+  let if_parser = map (fun (_, (s, _)) -> (Seq (s, skip), dummy_pos)) braces_parser in
     ls (tok IF, ls (tok LPAREN, ls (make_exp_parser (), ls (tok RPAREN, make_astmt_parser ())))) in
   let if_astmt_parser = 
 	map (fun (_, (_, (e, (_, s)))) -> (If (e,s,dummy_stmt), dummy_pos)) if_parser in
