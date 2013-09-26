@@ -120,6 +120,10 @@ and make_astmt_parser (():unit) : (token, stmt) parser =
 	lazy (lazy_seq (lazy (make_stmt_parser ()), lazy (tok RBRACE)))) in
   let braces_astmt_parser = 
 	map (fun (_, (s, _)) -> s) braces_parser in
+
+(* Note: We have an ambiguous grammar which parses if if else as both if {if else}  and if {if} else,
+   but alts will take the first alternative always, if a choice is available 
+   This is the only ambiguity in our grammar. *)
   let if_parser = 
     lazy_seq (lazy (tok IF), lazy (lazy_seq (lazy (tok LPAREN), 
 	lazy (lazy_seq (lazy (make_exp_parser ()), 
