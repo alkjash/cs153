@@ -21,7 +21,8 @@ let parse_error s =
  * terminals here.
  */
 %type <Ast.program> program
-%type <Ast.stmt> stmt
+%type <Ast.stmt> stmt astmt
+%type <Ast.exp> exp fexp eexp dexp cexp bexp aexp
 
 /* The %token directive gives a definition of all of the terminals
  * (i.e., tokens) in the grammar. This will be used to generate the
@@ -31,7 +32,10 @@ let parse_error s =
  * You will need to augment this with your own tokens...
  */
 %token <int> INT 
-%token EOF
+%token <Ast.var> VAR
+%token PLUS MINUS STAR SLASH EQ NEQ LT LTE GT GTE
+%token NOT AND OR ASSIGN IF ELSE WHILE FOR
+%token LBRACE RBRACE LPAREN RPAREN WHITESPACE COMMENT SEMI RETURN EOF
 
 /* Here's where the real grammar starts -- you'll need to add 
  * more rules here... Do not remove the 2%'s!! */
