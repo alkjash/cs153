@@ -43,6 +43,40 @@ let parse_error s =
 
 program:
   stmt EOF { $1 }
+;
 
-stmt :
+stmt:
   /* empty */ { (Ast.skip, 0) } 
+;
+
+astmt:
+  /* empty */ { (Ast.skip, 0) }
+;
+
+exp:
+  /* empty */ { (Int 0, 0) }
+;
+
+fexp:
+  /* empty */ { (Int 0, 0) }
+;
+
+eexp:
+  /* empty */ { (Int 0, 0) }
+;
+
+dexp:
+  /* empty */ { (Int 0, 0) }
+;
+
+cexp:
+  /* empty */ { (Int 0, 0) }
+;
+
+bexp:
+  /* empty */ { (Int 0, 0) }
+;
+
+aexp:
+  /* empty */ { (Int 0, 0) }
+;
