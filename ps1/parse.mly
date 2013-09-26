@@ -41,16 +41,18 @@ let parse_error s =
  * more rules here... Do not remove the 2%'s!! */
 %%
 
+/* Line numbers not parsed right now */
+
 program:
   stmt EOF { $1 }
 ;
 
 stmt:
-  /* empty */ { (Ast.skip, 0) } 
+  astmt* as s { s } 
 ;
 
 astmt:
-  /* empty */ { (Ast.skip, 0) }
+   LBRACE astmt* RBRACE { (Ast.skip, 0) }
 ;
 
 exp:

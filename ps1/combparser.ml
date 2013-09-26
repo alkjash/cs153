@@ -115,7 +115,8 @@ and make_astmt_parser (():unit) : (token, stmt) parser =
   let exp_parser = lazy_seq (lazy (make_exp_parser ()), lazy (tok SEMI)) in
   let exp_astmt_parser = map (fun (e, _) -> (Exp (e), dummy_pos)) exp_parser in
   let braces_parser = lazy_seq (lazy (tok LBRACE), 
-	lazy (lazy_seq (lazy (make_stmt_parser ()), lazy (tok RBRACE)))) in
+	(* TODO: fix this *)
+	lazy (lazy_seq (lazy (star (make_astmt_parser ())), lazy (tok RBRACE)))) in
   let braces_astmt_parser = 
 	map (fun (_, (s, _)) -> s) braces_parser in
   let if_parser = 
