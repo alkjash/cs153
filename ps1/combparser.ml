@@ -18,7 +18,7 @@ let tok (t : token) : (token, token) parser = satisfy (fun h -> t = h)
 (* Expressions factor as:
    aexp = Int | Var | ( exp )
    bexp = aexp | aexp / bexp | aexp * bexp
-   cexp = bexp | bexp - cexp | bexp + cexp
+   cexp = bexp | bexp - cexp | - cexp | bexp + cexp
    dexp = cexp | !dexp
    eexp = dexp | dexp (== , != , < , <= , > , >=) eexp
    fexp = eexp | eexp && fexp | eexp || fexp
@@ -42,12 +42,12 @@ let rec make_aexp_parser (() : unit) : (token, exp) parser =
 	  VAR(v) -> (Var(v), dummy_pos)
     | _ -> raise FatalError) var_parser in
   let paren_parser = seq (tok LPAREN,
-	lazy_seq (lazy (make_aexp_parser ()), lazy (tok RPAREN))) in
+	lazy_seq (lazy (make_exp_parser ()), lazy (tok RPAREN))) in
   let paren_exp_parser = map (fun (_, (e, _)) -> e) paren_parser in
   alts [int_exp_parser; var_exp_parser; paren_exp_parser]
 
 (* bexp = aexp | aexp / bexp | aexp * bexp *)
-let rec make_bexp_parser (() : unit) : (token, exp) parser = 
+and make_bexp_parser (() : unit) : (token, exp) parser = 
   let slash_parser = lazy_seq (lazy (make_aexp_parser ()), 
 	lazy (lazy_seq (lazy (tok SLASH), lazy (make_bexp_parser ())))) in
   let div_exp_parser = map (fun (e1, (_, e2)) -> (Binop(e1, Div, e2), dummy_pos)) slash_parser in
@@ -56,11 +56,13 @@ let rec make_bexp_parser (() : unit) : (token, exp) parser =
   let times_exp_parser = map (fun (e1, (_, e2)) -> (Binop(e1, Times, e2), dummy_pos)) star_parser in
   alts [make_aexp_parser (); div_exp_parser; times_exp_parser]
 
-(* cexp = bexp | bexp - cexp | bexp + cexp *)
+(* cexp = bexp | bexp - cexp | - cexp | bexp + cexp *)
 and make_cexp_parser (() : unit) : (token, exp) parser = 
-  let minus_parser = lazy_seq (lazy (make_bexp_parser ()), 
+  let minus_parser = lazy_seq (lazy (opt (make_bexp_parser ())), 
 	lazy (lazy_seq (lazy (tok MINUS), lazy (make_cexp_parser ())))) in
-  let minus_exp_parser = map (fun (e1, (_, e2)) -> (Binop(e1, Minus, e2), dummy_pos)) minus_parser in
+  let minus_exp_parser = map (fun (e1, (_, e2)) ->  match e1 with
+	  Some e -> (Binop(e, Minus, e2), dummy_pos)
+	| None -> (Binop((Int 0, dummy_pos), Minus, e2), dummy_pos)) minus_parser in
   let plus_parser = lazy_seq (lazy (make_bexp_parser ()), 
 	lazy (lazy_seq (lazy (tok PLUS), lazy (make_cexp_parser ())))) in
   let plus_exp_parser = map (fun (e1, (_, e2)) -> (Binop(e1, Plus, e2), dummy_pos)) plus_parser in
@@ -115,8 +117,7 @@ and make_astmt_parser (():unit) : (token, stmt) parser =
   let exp_parser = lazy_seq (lazy (make_exp_parser ()), lazy (tok SEMI)) in
   let exp_astmt_parser = map (fun (e, _) -> (Exp (e), dummy_pos)) exp_parser in
   let braces_parser = lazy_seq (lazy (tok LBRACE), 
-	(* TODO: fix this *)
-	lazy (lazy_seq (lazy (star (make_astmt_parser ())), lazy (tok RBRACE)))) in
+	lazy (lazy_seq (lazy (make_stmt_parser ()), lazy (tok RBRACE)))) in
   let braces_astmt_parser = 
 	map (fun (_, (s, _)) -> s) braces_parser in
   let if_parser = 
@@ -128,7 +129,7 @@ and make_astmt_parser (():unit) : (token, stmt) parser =
   let if_else_parser =
     lazy_seq (lazy (tok IF), lazy (lazy_seq (lazy (tok LPAREN), 
 	lazy (lazy_seq (lazy (make_exp_parser ()), lazy (lazy_seq (lazy (tok RPAREN),
-    lazy (lazy_seq (lazy (make_stmt_parser ()), 
+    lazy (lazy_seq (lazy (make_astmt_parser ()), 
 	lazy (lazy_seq (lazy (tok ELSE), lazy (make_astmt_parser ())))))))))))) in
   let if_else_astmt_parser = 
 	map (fun (_, (_, (e, (_, (s1, (_, s2)))))) -> ((If (e,s1,s2)), dummy_pos)) if_else_parser in
@@ -157,15 +158,14 @@ and make_astmt_parser (():unit) : (token, stmt) parser =
   alts [exp_astmt_parser; braces_astmt_parser; if_astmt_parser; if_else_astmt_parser; 
 	while_astmt_parser; for_astmt_parser; return_stmt_parser]
 
-(* Make parser at the statement level: parses a sequence of astmts into Seq(astmt, stmt) 
-   Adds in a skip at the end of the program after parsing the EOF *)
+(* Make parser at the statement level: parses a sequence of astmts into Seq(astmt, stmt) *)
 and make_stmt_parser (() : unit) : (token, stmt) parser =
   (* Parse recursively for >= 1 astmt *)
   let stmt_parser = lazy_seq (lazy (make_astmt_parser ()), lazy (make_stmt_parser ())) in
   let mult_stmt_parser = map (fun (a, b) -> (Seq (a, b), dummy_pos)) stmt_parser in	
-  (* Parse no statements *)
-  let eof_parser = const_map dummy_stmt (tok EOF) in
-	alts [mult_stmt_parser; eof_parser]
+	map (fun s -> match s with
+	  Some st -> st
+	| None -> dummy_stmt) (opt mult_stmt_parser)
 
 (* Constructs parser using make_stmt_parser, computes it on a list of tokens, and
    returns some complete parse matching the token list if it exists *)

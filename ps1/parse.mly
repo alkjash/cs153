@@ -48,11 +48,11 @@ program:
 ;
 
 stmt:
-  astmt* as s { s } 
+  astmt { $1 } 
 ;
 
 astmt:
-   LBRACE astmt* RBRACE { (Ast.skip, 0) }
+   LBRACE astmt RBRACE { (Ast.skip, 0) }
 ;
 
 exp:
