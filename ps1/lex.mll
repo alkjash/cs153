@@ -31,28 +31,28 @@ rule lexer = parse
 | eol 						{ incr_lineno lexbuf; lexer lexbuf } 
 | ws+ 						{ lexer lexbuf }
 | digit+ 					{ INT(int_of_string(Lexing.lexeme lexbuf)) }
+| identifier        		{ VAR(Lexing.lexeme lexbuf) }
 | "if"						{ IF }
 | "else"					{ ELSE }
 | "while"					{ WHILE }
 | "for"						{ FOR }
 | "return"					{ RETURN }
-| identifier as text        { VAR (text) } (* ? *)
 | "/*"                      { comment lexbuf }
-| '+'		                { PLUS }
-| '-'		                { MINUS }
-| '*'		                { STAR }
-| '/'		                { SLASH }
-| ';'                       { SEMI }
-| '('                       { LPAREN }
-| ')'                       { RPAREN }
+| "+"		                { PLUS }
+| "-"		                { MINUS }
+| "*"		                { STAR }
+| "/"		                { SLASH }
+| ";"                       { SEMI }
+| "("                       { LPAREN }
+| ")"                       { RPAREN }
 | "=="						{ EQ }
-| '='                       { ASSIGN }
+| "="                       { ASSIGN }
 | "!="						{ NEQ }
-| '!' 						{ NOT }
+| "!" 						{ NOT }
 | "<="						{ LTE }
-| '<'						{ LT }
+| "<"						{ LT }
 | ">="						{ GTE }
-| '>'						{ GT }
+| ">"						{ GT }
 | "&&"						{ AND }
 | "||"						{ OR }
 | "{"						{ LBRACE }
