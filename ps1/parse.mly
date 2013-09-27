@@ -58,20 +58,21 @@ program:
 
 stmt:
   astmt 				{ $1 } 
-| astmt stmt			{ (Seq($1, $2), rhs 1) }
+| astmt stmt			{ (Seq($1, $2), snd $1) }
 ;
 
 astmt:
   LBRACE stmt RBRACE 	{ (fst $2, rhs 1) }
-| exp SEMI				{ (Exp $1, rhs 1) }
+| exp SEMI				{ (Exp $1, snd $1) }
 | IF LPAREN exp RPAREN astmt %prec IFX
-						{ (If($3, $5, (skip, rhs 4)), rhs 1) }
+						{ (If($3, $5, (skip, snd $5)), rhs 1) }
 | IF LPAREN exp RPAREN astmt ELSE astmt
 						{ (If($3, $5, $7), rhs 1) }
 | WHILE LPAREN exp RPAREN astmt
 						{ (While($3, $5), rhs 1) }
 | FOR LPAREN exp SEMI exp SEMI exp RPAREN astmt
 						{ (For($3, $5, $7, $9), rhs 1) }
+| RETURN exp SEMI		{ (Return($2), rhs 1) }
 ;
 
 exp:
@@ -81,18 +82,18 @@ exp:
 
 fexp:
   eexp 					{ $1 }
-| eexp AND fexp 		{ (And($1, $3), rhs 1) }
-| eexp OR fexp 			{ (Or($1, $3), rhs 1) }
+| eexp AND fexp 		{ (And($1, $3), snd $1) }
+| eexp OR fexp 			{ (Or($1, $3), snd $1) }
 ;
 
 eexp:
   dexp 					{ $1 }
-| dexp EQ eexp 			{ (Binop($1, Eq, $3), rhs 1) }
-| dexp NEQ eexp 		{ (Binop($1, Neq, $3), rhs 1) }
-| dexp LT eexp 			{ (Binop($1, Lt, $3), rhs 1) }
-| dexp LTE eexp 		{ (Binop($1, Lte, $3), rhs 1) }
-| dexp GT eexp 			{ (Binop($1, Gt, $3), rhs 1) }
-| dexp GTE eexp 		{ (Binop($1, Gte, $3), rhs 1) }
+| dexp EQ eexp 			{ (Binop($1, Eq, $3), snd $1) }
+| dexp NEQ eexp 		{ (Binop($1, Neq, $3), snd $1) }
+| dexp LT eexp 			{ (Binop($1, Lt, $3), snd $1) }
+| dexp LTE eexp 		{ (Binop($1, Lte, $3), snd $1) }
+| dexp GT eexp 			{ (Binop($1, Gt, $3), snd $1) }
+| dexp GTE eexp 		{ (Binop($1, Gte, $3), snd $1) }
 ;
 
 dexp:
@@ -102,15 +103,15 @@ dexp:
 
 cexp:
   bexp 					{ $1 }
-| bexp MINUS cexp 		{ (Binop($1, Minus, $3), rhs 1) }
+| bexp MINUS cexp 		{ (Binop($1, Minus, $3), snd $1) }
 | MINUS cexp			{ (Binop((Int 0, rhs 1), Minus, $2), rhs 1) }
-| bexp PLUS cexp		{ (Binop($1, Plus, $3), rhs 1) }
+| bexp PLUS cexp		{ (Binop($1, Plus, $3), snd $1) }
 ;
 
 bexp:
   aexp { $1 }
-| aexp SLASH bexp 		{ (Binop($1, Div, $3), rhs 1) }
-| aexp STAR bexp		{ (Binop($1, Times, $3), rhs 1) }
+| aexp SLASH bexp 		{ (Binop($1, Div, $3), snd $1) }
+| aexp STAR bexp		{ (Binop($1, Times, $3), snd $1) }
 ;
 
 aexp:

@@ -1,4 +1,4 @@
-(* Lexer for Fish --- TODO *)
+(* Lexer for Fish *)
 
 (* You need to add new definition to build the
  * appropriate terminals to feed to parse.mly.
@@ -22,8 +22,8 @@ let nl='\010'
 let eol=(cr nl|nl|cr)
 let ws=('\012'|'\t'|' ')*
 let digit=['0'-'9']
-let character=['a'-'b']
-let identifier=character+digit*'\137'*
+let character=['a'-'z' 'A'-'Z']
+let identifier=character (character|'_'|digit)*
 
 
 (* rules section *)
@@ -50,11 +50,6 @@ rule lexer = parse
 | ">="						{ GTE }
 | "&&"						{ AND }
 | "||"						{ OR }
-| "if"						{ IF }
-| "else"					{ ELSE }
-| "while"					{ WHILE }
-| "for"						{ FOR }
-| "return"					{ RETURN }
 | "{"						{ LBRACE }
 | "}"						{ RBRACE }
 | eof		                { EOF }
