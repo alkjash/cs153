@@ -33,8 +33,6 @@ rule lexer = parse
 | digit+ { INT(int_of_string(Lexing.lexeme lexbuf)) }
 | identifier as text        { VAR (text) } (* ? *)
 | "/*"                      { comment lexbuf }
-| "let"                     { LET }
-| "in"                      { IN }
 | '+'		                { PLUS }
 | '-'		                { MINUS }
 | '*'		                { STAR }
