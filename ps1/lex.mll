@@ -32,27 +32,7 @@ rule lexer = parse
 | ws+ { lexer lexbuf }
 | digit+ { INT(int_of_string(Lexing.lexeme lexbuf)) }
 | identifier        { VAR (Lexing.lexeme lexbuf) }
-| "/*"                      { comment lexbuf }
-| "+"		                { PLUS }
-| "-"		                { MINUS }
-| "*"		                { STAR }
-| "/"		                { SLASH }
-| "="                       { ASSIGN }
-| ";"                       { SEMI }
-| "("                       { LPAREN }
-| ")"                       { RPAREN }
-| "!" 						{ NOT }
-| "=="						{ EQ }
-| "!="						{ NEQ }
-| "<"						{ LT }
-| "<="						{ LTE }
-| ">"						{ GT }
-| ">="						{ GTE }
-| "&&"						{ AND }
-| "||"						{ OR }
-| "{"						{ LBRACE }
-| "}"						{ RBRACE }
-| eof		                { EOF }
+
 
 and comment = parse
   | "*/"                        { lexer lexbuf }
