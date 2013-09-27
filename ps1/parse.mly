@@ -42,6 +42,7 @@ let parse_error s =
 %left EQ NEQ LT LTE GT GTE
 %left PLUS MINUS
 %left MULTIPLY DIVIDE
+%left UMINUS
 
 %nonassoc IFX
 %nonassoc ELSE
@@ -110,15 +111,16 @@ dexp:
 
 cexp:
   bexp 					{ $1 }
-| bexp MINUS cexp 		{ (Binop($1, Minus, $3), snd $1) }
-| MINUS cexp			{ (Binop((Int 0, rhs 1), Minus, $2), rhs 1) }
-| bexp PLUS cexp		{ (Binop($1, Plus, $3), snd $1) }
+| cexp MINUS bexp 		{ (Binop($1, Minus, $3), snd $1) }
+| MINUS cexp %prec UMINUS
+						{ (Binop((Int 0, rhs 1), Minus, $2), rhs 1) }
+| cexp PLUS bexp		{ (Binop($1, Plus, $3), snd $1) }
 ;
 
 bexp:
-  aexp { $1 }
-| aexp SLASH bexp 		{ (Binop($1, Div, $3), snd $1) }
-| aexp STAR bexp		{ (Binop($1, Times, $3), snd $1) }
+  aexp 					{ $1 }
+| bexp SLASH aexp 		{ (Binop($1, Div, $3), snd $1) }
+| bexp STAR aexp		{ (Binop($1, Times, $3), snd $1) }
 ;
 
 aexp:
