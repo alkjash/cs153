@@ -114,6 +114,8 @@ and make_exp_parser (() : unit) : (token, exp) parser =
    Does not match the empty list to guarantee that make_stmt_parser doesn't go into
    infinite loop *)
 and make_astmt_parser (():unit) : (token, stmt) parser =
+  (* exp_parser won't accept an empty token list, so we need this extra case *)
+  let empty_exp_astmt_parser = const_map (skip, dummy_pos) (tok SEMI) in
   let exp_parser = lazy_seq (lazy (make_exp_parser ()), lazy (tok SEMI)) in
   let exp_astmt_parser = map (fun (e, _) -> (Exp (e), dummy_pos)) exp_parser in
   let braces_parser = lazy_seq (lazy (tok LBRACE), 
@@ -123,7 +125,8 @@ and make_astmt_parser (():unit) : (token, stmt) parser =
 
 (* Note: We have an ambiguous grammar which parses if if else as both if {if else}  and if {if} else,
    but alts will take the first alternative always, if a choice is available 
-   This is the only ambiguity in our grammar. *)
+   This is the only ambiguity in our grammar.
+   In practice ps1comb will always return the if {if else} parse. *)
   let if_parser = 
     lazy_seq (lazy (tok IF), lazy (lazy_seq (lazy (tok LPAREN), 
 	lazy (lazy_seq (lazy (make_exp_parser ()), 
@@ -159,12 +162,12 @@ and make_astmt_parser (():unit) : (token, stmt) parser =
   let return_parser = seq (tok RETURN, lazy_seq (lazy (make_exp_parser ()), lazy (
     tok SEMI))) in
   let return_stmt_parser = map (fun (_, (e, _)) -> ((Return e), dummy_pos)) return_parser in
-  alts [exp_astmt_parser; braces_astmt_parser; if_astmt_parser; if_else_astmt_parser; 
+  alts [empty_exp_astmt_parser; exp_astmt_parser; braces_astmt_parser; if_astmt_parser; if_else_astmt_parser; 
 	while_astmt_parser; for_astmt_parser; return_stmt_parser]
 
 (* Make parser at the statement level: parses a sequence of astmts into Seq(astmt, stmt) *)
 and make_stmt_parser (() : unit) : (token, stmt) parser =
-  (* Parse recursively for >= 1 astmt *)
+  (* Parse recursively for >= 0 astmt *)
   let stmt_parser = lazy_seq (lazy (make_astmt_parser ()), lazy (make_stmt_parser ())) in
   let mult_stmt_parser = map (fun (a, b) -> (Seq (a, b), dummy_pos)) stmt_parser in	
 	map (fun s -> match s with

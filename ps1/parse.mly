@@ -22,7 +22,7 @@ let parse_error s =
  */
 %type <Ast.program> program
 %type <Ast.stmt> stmt astmt
-%type <Ast.exp> exp fexp eexp dexp cexp bexp aexp
+%type <Ast.exp> optexp exp fexp eexp dexp cexp bexp aexp
 
 /* The %token directive gives a definition of all of the terminals
  * (i.e., tokens) in the grammar. This will be used to generate the
@@ -62,17 +62,24 @@ stmt:
 ;
 
 astmt:
-  LBRACE stmt RBRACE 	{ (fst $2, rhs 1) }
-| exp SEMI				{ (Exp $1, snd $1) }
+  LBRACE RBRACE			{ (Exp (Int 0, rhs 1), rhs 1) }
+| LBRACE stmt RBRACE 	{ (fst $2, rhs 1) }
+| SEMI					{ (Exp (Int 0, rhs 1), rhs 1) }
+| exp SEMI				{ (Exp $1, rhs 1) }
 | IF LPAREN exp RPAREN astmt %prec IFX
 						{ (If($3, $5, (skip, snd $5)), rhs 1) }
 | IF LPAREN exp RPAREN astmt ELSE astmt
 						{ (If($3, $5, $7), rhs 1) }
 | WHILE LPAREN exp RPAREN astmt
 						{ (While($3, $5), rhs 1) }
-| FOR LPAREN exp SEMI exp SEMI exp RPAREN astmt
+| FOR LPAREN optexp SEMI exp SEMI optexp RPAREN astmt
 						{ (For($3, $5, $7, $9), rhs 1) }
 | RETURN exp SEMI		{ (Return($2), rhs 1) }
+;
+
+optexp:
+						{ (Int 0, 0) }
+|  exp					{ $1 }
 ;
 
 exp:
