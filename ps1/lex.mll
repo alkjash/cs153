@@ -31,12 +31,12 @@ rule lexer = parse
 | eol 						{ incr_lineno lexbuf; lexer lexbuf } 
 | ws+ 						{ lexer lexbuf }
 | digit+ 					{ INT(int_of_string(Lexing.lexeme lexbuf)) }
-| identifier        		{ VAR(Lexing.lexeme lexbuf) }
 | "if"						{ IF }
 | "else"					{ ELSE }
 | "while"					{ WHILE }
 | "for"						{ FOR }
 | "return"					{ RETURN }
+| identifier				{ VAR(Lexing.lexeme lexbuf) }
 | "/*"                      { comment lexbuf }
 | "+"		                { PLUS }
 | "-"		                { MINUS }
