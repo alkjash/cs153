@@ -1,4 +1,4 @@
-(* Lexer for Fish --- TODO *)
+(* Lexer for Fish *)
 
 (* You need to add new definition to build the
  * appropriate terminals to feed to parse.mly.
@@ -22,39 +22,39 @@ let nl='\010'
 let eol=(cr nl|nl|cr)
 let ws=('\012'|'\t'|' ')*
 let digit=['0'-'9']
-let character=['a'-'b']
-let identifier=character+digit*'\137'*
+let character=['a'-'z' 'A'-'Z']
+let identifier=character (character|'_'|digit)*
 
 
 (* rules section *)
 rule lexer = parse
-| eol { incr_lineno lexbuf; lexer lexbuf } 
-| ws+ { lexer lexbuf }
-| digit+ { INT(int_of_string(Lexing.lexeme lexbuf)) }
+| eol 						{ incr_lineno lexbuf; lexer lexbuf } 
+| ws+ 						{ lexer lexbuf }
+| digit+ 					{ INT(int_of_string(Lexing.lexeme lexbuf)) }
+| "if"						{ IF }
+| "else"					{ ELSE }
+| "while"					{ WHILE }
+| "for"						{ FOR }
+| "return"					{ RETURN }
 | identifier as text        { VAR (text) } (* ? *)
 | "/*"                      { comment lexbuf }
 | '+'		                { PLUS }
 | '-'		                { MINUS }
 | '*'		                { STAR }
 | '/'		                { SLASH }
-| '='                       { ASSIGN }
 | ';'                       { SEMI }
 | '('                       { LPAREN }
 | ')'                       { RPAREN }
-| '!' 						{ NOT }
 | "=="						{ EQ }
+| '='                       { ASSIGN }
 | "!="						{ NEQ }
-| '<'						{ LT }
+| '!' 						{ NOT }
 | "<="						{ LTE }
-| '>'						{ GT }
+| '<'						{ LT }
 | ">="						{ GTE }
+| '>'						{ GT }
 | "&&"						{ AND }
 | "||"						{ OR }
-| "if"						{ IF }
-| "else"					{ ELSE }
-| "while"					{ WHILE }
-| "for"						{ FOR }
-| "return"					{ RETURN }
 | "{"						{ LBRACE }
 | "}"						{ RBRACE }
 | eof		                { EOF }
