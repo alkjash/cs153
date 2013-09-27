@@ -21,7 +21,8 @@ let parse_error s =
  * terminals here.
  */
 %type <Ast.program> program
-%type <Ast.stmt> stmt
+%type <Ast.stmt> stmt astmt
+%type <Ast.exp> exp fexp eexp dexp cexp bexp aexp
 
 /* The %token directive gives a definition of all of the terminals
  * (i.e., tokens) in the grammar. This will be used to generate the
@@ -31,14 +32,89 @@ let parse_error s =
  * You will need to augment this with your own tokens...
  */
 %token <int> INT 
-%token EOF
+%token <Ast.var> VAR
+%token PLUS MINUS STAR SLASH EQ NEQ LT LTE GT GTE
+%token NOT AND OR ASSIGN IF ELSE WHILE FOR
+%token LBRACE RBRACE LPAREN RPAREN WHITESPACE COMMENT SEMI RETURN EOF
+
+%left ASSIGN
+%left NOT AND OR
+%left EQ NEQ LT LTE GT GTE
+%left PLUS MINUS
+%left MULTIPLY DIVIDE
+
+%nonassoc IFX
+%nonassoc ELSE
 
 /* Here's where the real grammar starts -- you'll need to add 
  * more rules here... Do not remove the 2%'s!! */
 %%
 
-program:
-  stmt EOF { $1 }
+/* Line numbers not parsed right now */
 
-stmt :
-  /* empty */ { (Ast.skip, 0) } 
+program:
+  stmt EOF 				{ $1 }
+;
+
+stmt:
+  astmt 				{ $1 } 
+| astmt stmt			{ (Seq($1, $2), rhs 1) }
+;
+
+astmt:
+  LBRACE stmt RBRACE 	{ (fst $2, rhs 1) }
+| exp SEMI				{ (Exp $1, rhs 1) }
+| IF LPAREN exp RPAREN astmt %prec IFX
+						{ (If($3, $5, (skip, rhs 4)), rhs 1) }
+| IF LPAREN exp RPAREN astmt ELSE astmt
+						{ (If($3, $5, $7), rhs 1) }
+| WHILE LPAREN exp RPAREN astmt
+						{ (While($3, $5), rhs 1) }
+| FOR LPAREN exp SEMI exp SEMI exp RPAREN astmt
+						{ (For($3, $5, $7, $9), rhs 1) }
+;
+
+exp:
+  fexp 					{ $1 }
+| VAR ASSIGN exp 		{ (Assign($1, $3), rhs 1) }
+;
+
+fexp:
+  eexp 					{ $1 }
+| eexp AND fexp 		{ (And($1, $3), rhs 1) }
+| eexp OR fexp 			{ (Or($1, $3), rhs 1) }
+;
+
+eexp:
+  dexp 					{ $1 }
+| dexp EQ eexp 			{ (Binop($1, Eq, $3), rhs 1) }
+| dexp NEQ eexp 		{ (Binop($1, Neq, $3), rhs 1) }
+| dexp LT eexp 			{ (Binop($1, Lt, $3), rhs 1) }
+| dexp LTE eexp 		{ (Binop($1, Lte, $3), rhs 1) }
+| dexp GT eexp 			{ (Binop($1, Gt, $3), rhs 1) }
+| dexp GTE eexp 		{ (Binop($1, Gte, $3), rhs 1) }
+;
+
+dexp:
+  cexp 					{ $1 }
+| NOT dexp 				{ (Not($2), rhs 1) }
+;
+
+cexp:
+  bexp 					{ $1 }
+| bexp MINUS cexp 		{ (Binop($1, Minus, $3), rhs 1) }
+| MINUS cexp			{ (Binop((Int 0, rhs 1), Minus, $2), rhs 1) }
+| bexp PLUS cexp		{ (Binop($1, Plus, $3), rhs 1) }
+;
+
+bexp:
+  aexp { $1 }
+| aexp SLASH bexp 		{ (Binop($1, Div, $3), rhs 1) }
+| aexp STAR bexp		{ (Binop($1, Times, $3), rhs 1) }
+;
+
+aexp:
+  INT 					{ (Int($1), rhs 1) }
+| VAR 					{ (Var($1), rhs 1) }
+| LPAREN exp RPAREN 	{ $2 }
+;
