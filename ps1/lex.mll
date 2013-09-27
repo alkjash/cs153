@@ -28,11 +28,36 @@ let identifier=character (character|'_'|digit)*
 
 (* rules section *)
 rule lexer = parse
-| eol { incr_lineno lexbuf; lexer lexbuf } 
-| ws+ { lexer lexbuf }
-| digit+ { INT(int_of_string(Lexing.lexeme lexbuf)) }
-| identifier        { VAR (Lexing.lexeme lexbuf) }
-
+| eol 						{ incr_lineno lexbuf; lexer lexbuf } 
+| ws+ 						{ lexer lexbuf }
+| digit+ 					{ INT(int_of_string(Lexing.lexeme lexbuf)) }
+| identifier        		{ VAR(Lexing.lexeme lexbuf) }
+| "if"						{ IF }
+| "else"					{ ELSE }
+| "while"					{ WHILE }
+| "for"						{ FOR }
+| "return"					{ RETURN }
+| "/*"                      { comment lexbuf }
+| "+"		                { PLUS }
+| "-"		                { MINUS }
+| "*"		                { STAR }
+| "/"		                { SLASH }
+| ";"                       { SEMI }
+| "("                       { LPAREN }
+| ")"                       { RPAREN }
+| "=="						{ EQ }
+| "="                       { ASSIGN }
+| "!="						{ NEQ }
+| "!" 						{ NOT }
+| "<="						{ LTE }
+| "<"						{ LT }
+| ">="						{ GTE }
+| ">"						{ GT }
+| "&&"						{ AND }
+| "||"						{ OR }
+| "{"						{ LBRACE }
+| "}"						{ RBRACE }
+| eof		                { EOF }
 
 and comment = parse
   | "*/"                        { lexer lexbuf }
