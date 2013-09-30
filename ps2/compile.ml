@@ -1,5 +1,6 @@
 (* Compile Fish AST to MIPS AST *)
 open Mips
+open Ast
 
 exception IMPLEMENT_ME
 
@@ -30,12 +31,34 @@ let rec new_temp() =
 (* reset internal state *)
 let reset() = (label_counter := 0; variables := VarSet.empty)
 
+(* Helper to add a variable to the variables Set; Prepends "MOO" to variable names
+ * to avoid conflicts with MIPs codes *)
+let var_add (s : string) : unit =
+	ignore (variables := VarSet.add ("MOO" ^ s) (!variables))
+
+(* Helper to find all the variables in an expression and add
+ * them to the set variables *)
+let rec collect_vars_exp (e : Ast.exp) : unit =
+	match fst e with
+	  Int(_) -> ()
+	| Var(x) -> var_add x
+	| Binop(e1, _, e2) -> (collect_vars_exp e1; collect_vars_exp e2)
+    | Not(e) -> collect_vars_exp e
+	| And(e1, e2) -> (collect_vars_exp e1; collect_vars_exp e2)
+	| Or(e1, e2) -> (collect_vars_exp e1; collect_vars_exp e2)
+	| Assign(x, e) -> (var_add x; collect_vars_exp e) 
+
 (* find all of the variables in a program and add them to
  * the set variables *)
 let rec collect_vars (p : Ast.program) : unit = 
-    (*************************************************************)
-    raise IMPLEMENT_ME
-    (*************************************************************)
+	match fst p with
+	  Exp(e) -> collect_vars_exp e
+	| Seq(s1, s2) -> (collect_vars s1; collect_vars s2)
+	| If(e, s1, s2) -> (collect_vars_exp e; collect_vars s1; collect_vars s2)
+	| While(e, s) -> (collect_vars_exp e; collect_vars s)
+	| For(e1, e2, e3, s) -> (collect_vars_exp e1; collect_vars_exp e2; 
+		collect_vars_exp e3; collect_vars s)
+	| Return(e) -> collect_vars_exp e
 
 (* compiles a Fish statement down to a list of MIPS instructions.
  * Note that a "Return" is accomplished by placing the resulting
