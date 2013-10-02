@@ -64,16 +64,54 @@ let rec collect_vars (p : Ast.program) : unit =
  * Note that a "Return" is accomplished by placing the resulting
  * value in R2 and then doing a Jr R31.
  *)
+
+(* Compile statement example code 
+let rec stmt2mips(s:stmt):inst list =
+match s with
+| Exp e ->
+exp2mips e
+| Seq(s1,s2) ->
+(stmt2mips s1) @ (stmt2mips s2)
+| If(e,s1,s2) ->
+(let else_l = new_label() in
+let end_l = new_label() in
+(exp2mips e) @ [Beq(R2,R0,else_l)] @
+(stmt2mips s1) @ [J end_l,Label else_l] @
+(stmt2mips s2) @ [Label end_l])
+| While(e,s) ->
+(let test_l = new_label() in
+let top_l = new_label() in
+[J test_l, Label top_l] @
+(stmt2mips s) @
+[Label test_l] @
+(exp2mips e) @
+[Bne(R2,R0,top_l)])
+| For(e1,e2,e3,s) ->
+stmt2mips(Seq(Exp e1,While(e2,Seq(s,Exp e3)))) *)
+
 let rec compile_stmt ((s,_):Ast.stmt) : inst list = 
-    (*************************************************************)
     match s with
-    | Exp(e) -> compile_exp (e,0)
+    | Exp(e) -> compile_exp e
     | Seq(s1,s2) -> raise IMPLEMENT_ME
-    | If(e,s1,s2) ->
+    | If(e,s1,s2) -> 
     | While(e,s) ->
     | For(e1,e2,e3,s) -> 
     | Return(e) ->
-    (*************************************************************)
+
+(* Compile Expression example code 
+ let rec exp2mips(e:exp):inst list =
+match e with
+| Int j -> [Li(R2, Word32.fromInt j)]
+| Var x -> [La(R2,x), Lw(R2,R2,zero)]
+| Binop(e1,b,e2) ->
+(let t = new_temp()in
+(exp2mips e1) @ [La(R1,t), Sw(R2,R1,zero)]
+@(exp2mips e2) @ [La(R1,t), Lw(R1,R1,zero)]
+@(match b with
+Plus -> [Add(R2,R2,Reg R1)]
+| ... -> ...))
+| Assign(x,e) => [exp2mips e] @
+[La(R1,x), Sw(R2,R1,zero)] *)
 
 let rec compile_exp ((e,_):Ast.exp) : inst list =
     match e with
