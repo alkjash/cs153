@@ -66,9 +66,25 @@ let rec collect_vars (p : Ast.program) : unit =
  *)
 let rec compile_stmt ((s,_):Ast.stmt) : inst list = 
     (*************************************************************)
-    raise IMPLEMENT_ME
+    match s with
+    | Exp(e) -> compile_exp (e,0)
+    | Seq(s1,s2) -> raise IMPLEMENT_ME
+    | If(e,s1,s2) ->
+    | While(e,s) ->
+    | For(e1,e2,e3,s) -> 
+    | Return(e) ->
     (*************************************************************)
 
+let rec compile_exp ((e,_):Ast.exp) : inst list =
+    match e with
+    | Int j -> raise IMPLEMENT_ME
+    | Var x -> raise IMPLEMENT_ME
+    | Binop(e1, _, e2) ->
+    | Not(e) -> 
+    | And(e1, e2) -> 
+    | Or(e1, e2) -> 
+    | Assign(x, e) ->  
+    
 (* compiles Fish AST down to MIPS instructions and a list of global vars *)
 let compile (p : Ast.program) : result = 
     let _ = reset() in
