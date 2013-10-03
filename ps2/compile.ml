@@ -65,6 +65,57 @@ let rec collect_vars (p : Ast.program) : unit =
  * value in R2 and then doing a Jr R31.
  *)
 
+let zero = Word32.fromInt 0
+
+(* The only guarantee we make of an expression is that R2 is stored with its value after it is 
+   finished evaluating. It may or may not clobber all the other registers in the process *)
+let rec compile_exp ((e , _) : Ast.exp) : inst list =
+    match e with
+      Int j -> [Li(R2, Word32.fromInt j)]
+
+    | Var x -> [La(R2, x); Lw(R2, R2, zero)]
+
+    | Binop(e1, op, e2) -> 
+	(let t = new_temp() in 
+	(* Store return value of e1 into t *)
+	(compile_exp e1) @ [La(R3, t); Sw(R2, R3, zero)] 
+	(* Recover e1 from t into R3, meanwhile return value of e2 is in R2 *)
+	@ (compile_exp e2) @ [La(R3, t); Lw(R3, R3, zero)]
+	@ (match op with
+		  Plus -> [Add(R2, R3, Reg R2)]
+		| Minus -> [Sub(R2, R3, R2)]
+		| Times -> [Mul(R2, R3, R2)]
+		| Div -> [Mips.Div(R2, R3, R2)]
+		| Eq -> [Mips.Seq(R2, R3, R2)]
+		| Neq -> [Sne(R2, R3, R2)]
+		| Lt -> [Slt(R2, R3, R2)]
+		| Lte -> [Sle(R2, R3, R2)]
+		| Gt -> [Sgt(R2, R3, R2)]
+		| Gte -> [Sge(R2, R3, R2)]
+	))
+
+    | Not(e) -> (compile_exp e) @ [Mips.Seq(R2, R2, R0)] (* Set R2 to 1 if zero, zero otherwise *)
+
+    | And(e1, e2) -> 
+	(let t = new_temp() in 
+	let l = new_label() in
+	(* If e1 = 0 jump directly to end, otherwise store return value of e1 into t *)
+	(compile_exp e1) @ [Beq(R2, R0, l); La(R3, t); Sw(R2, R3, zero)] 
+	(* Recover e1 from t into R3, meanwhile return value of e2 is in R2 *)
+	@ (compile_exp e2) @ [La(R3, t); Lw(R3, R3, zero)]
+	@ [Label l; Mips.And(R2, R2, Reg(R3))])
+
+    | Or(e1, e2) -> 
+	(let t = new_temp() in 
+	let l = new_label() in
+	(* If e1 != 0 jump directly to end, otherwise store return value of e1 into t *)
+	(compile_exp e1) @ [Bne(R2, R0, l); La(R3, t); Sw(R2, R3, zero)] 
+	(* Recover e1 from t into R3, meanwhile return value of e2 is in R2 *)
+	@ (compile_exp e2) @ [La(R3, t); Lw(R3, R3, zero)]
+	@ [Label l; Mips.Or(R2, R2, Reg(R3))])
+
+    | Assign(x, e) -> (compile_exp e) @ [La(R3, x); Sw(R2, R3, zero)] 
+
 (* Compile statement example code 
 let rec stmt2mips(s:stmt):inst list =
 match s with
@@ -93,36 +144,11 @@ let rec compile_stmt ((s,_):Ast.stmt) : inst list =
     match s with
     | Exp(e) -> compile_exp e
     | Seq(s1,s2) -> raise IMPLEMENT_ME
-    | If(e,s1,s2) -> 
-    | While(e,s) ->
-    | For(e1,e2,e3,s) -> 
-    | Return(e) ->
+    | If(e,s1,s2) -> raise IMPLEMENT_ME
+    | While(e,s) -> raise IMPLEMENT_ME
+    | For(e1,e2,e3,s) -> raise IMPLEMENT_ME 
+    | Return(e) -> raise IMPLEMENT_ME
 
-(* Compile Expression example code 
- let rec exp2mips(e:exp):inst list =
-match e with
-| Int j -> [Li(R2, Word32.fromInt j)]
-| Var x -> [La(R2,x), Lw(R2,R2,zero)]
-| Binop(e1,b,e2) ->
-(let t = new_temp()in
-(exp2mips e1) @ [La(R1,t), Sw(R2,R1,zero)]
-@(exp2mips e2) @ [La(R1,t), Lw(R1,R1,zero)]
-@(match b with
-Plus -> [Add(R2,R2,Reg R1)]
-| ... -> ...))
-| Assign(x,e) => [exp2mips e] @
-[La(R1,x), Sw(R2,R1,zero)] *)
-
-let rec compile_exp ((e,_):Ast.exp) : inst list =
-    match e with
-    | Int j -> raise IMPLEMENT_ME
-    | Var x -> raise IMPLEMENT_ME
-    | Binop(e1, _, e2) ->
-    | Not(e) -> 
-    | And(e1, e2) -> 
-    | Or(e1, e2) -> 
-    | Assign(x, e) ->  
-    
 (* compiles Fish AST down to MIPS instructions and a list of global vars *)
 let compile (p : Ast.program) : result = 
     let _ = reset() in
