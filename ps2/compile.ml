@@ -143,10 +143,23 @@ stmt2mips(Seq(Exp e1,While(e2,Seq(s,Exp e3)))) *)
 let rec compile_stmt ((s,_):Ast.stmt) : inst list = 
     match s with
     | Exp(e) -> compile_exp e
-    | Seq(s1,s2) -> raise IMPLEMENT_ME
-    | If(e,s1,s2) -> raise IMPLEMENT_ME
-    | While(e,s) -> raise IMPLEMENT_ME
-    | For(e1,e2,e3,s) -> raise IMPLEMENT_ME 
+    | Seq(s1,s2) -> (compile_stmt s1) @ (compile_stmt s2)
+    | If(e,s1,s2) ->
+        (let else_1 = new_label() in
+        let end_l = new_label() in
+        (compile_exp e) @ [Beq(R2, R0, else_1)] @
+        (compile_stmt s1) @ [J end_l, Label else_1] @
+        (compile_stmt s2) @ [Label end_l])
+    | While(e,s) ->
+        (let test_l = new_label() in
+        let top_l = new_label() in
+        [J test_l, Label top_l] @
+        (compile_stmt s) @
+        [Label test_l] @
+        (compile_exp e) @
+        [Bne(R2,R0,top_l)])
+    | For(e1,e2,e3,s) ->
+        compile_stmt(Seq(Exp e1,While(e2,Seq(s,Exp e3)))) 
     | Return(e) -> raise IMPLEMENT_ME
 
 (* compiles Fish AST down to MIPS instructions and a list of global vars *)
