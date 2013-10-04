@@ -67,58 +67,58 @@ let rec collect_vars (p : Ast.program) : unit =
 
 let zero = Word32.fromInt 0
 
-(* The only guarantee we make of an expression is that R2 is stored with its value after it is 
+(* The only guarantee we make of an expression is that R3 is stored with its value after it is 
    finished evaluating. It may or may not clobber all the other registers in the process *)
 let rec compile_exp ((e , _) : Ast.exp) : inst list =
     match e with
-      Int j -> [Li(R2, Word32.fromInt j)]
+      Int j -> [Li(R3, Word32.fromInt j)]
 
-    | Var x -> [La(R2, x); Lw(R2, R2, zero)]
+    | Var x -> [La(R3, x); Lw(R3, R3, zero)]
 
     | Binop(e1, op, e2) -> 
 	(let t = new_temp() in 
 	(* Store return value of e1 into t *)
-	(compile_exp e1) @ [La(R3, t); Sw(R2, R3, zero)] 
-	(* Recover e1 from t into R3, meanwhile return value of e2 is in R2 *)
-	@ (compile_exp e2) @ [La(R3, t); Lw(R3, R3, zero)]
+	(compile_exp e1) @ [La(R4, t); Sw(R3, R4, zero)] 
+	(* Recover e1 from t into R4, meanwhile return value of e2 is in R3 *)
+	@ (compile_exp e2) @ [La(R4, t); Lw(R4, R4, zero)]
 	@ (match op with
-		  Plus -> [Add(R2, R3, Reg R2)]
-		| Minus -> [Sub(R2, R3, R2)]
-		| Times -> [Mul(R2, R3, R2)]
-		| Div -> [Mips.Div(R2, R3, R2)]
-		| Eq -> [Mips.Seq(R2, R3, R2)]
-		| Neq -> [Sne(R2, R3, R2)]
-		| Lt -> [Slt(R2, R3, R2)]
-		| Lte -> [Sle(R2, R3, R2)]
-		| Gt -> [Sgt(R2, R3, R2)]
-		| Gte -> [Sge(R2, R3, R2)]
+		  Plus -> [Add(R3, R4, Reg R3)]
+		| Minus -> [Sub(R3, R4, R3)]
+		| Times -> [Mul(R3, R4, R3)]
+		| Div -> [Mips.Div(R3, R4, R3)]
+		| Eq -> [Mips.Seq(R3, R4, R3)]
+		| Neq -> [Sne(R3, R4, R3)]
+		| Lt -> [Slt(R3, R4, R3)]
+		| Lte -> [Sle(R3, R4, R3)]
+		| Gt -> [Sgt(R3, R4, R3)]
+		| Gte -> [Sge(R3, R4, R3)]
 	))
 
-    | Not(e) -> (compile_exp e) @ [Mips.Seq(R2, R2, R0)] (* Set R2 to 1 if zero, zero otherwise *)
+    | Not(e) -> (compile_exp e) @ [Mips.Seq(R3, R3, R0)] (* Set R3 to 1 if zero, zero otherwise *)
 
     | And(e1, e2) -> 
 	(let t = new_temp() in 
 	let l = new_label() in
 	(* If e1 = 0 jump directly to end, otherwise store return value of e1 into t *)
-	(compile_exp e1) @ [Beq(R2, R0, l); La(R3, t); Sw(R2, R3, zero)] 
-	(* Recover e1 from t into R3, meanwhile return value of e2 is in R2 *)
-	@ (compile_exp e2) @ [La(R3, t); Lw(R3, R3, zero)]
-	(* Store if R3 is nonzero in R3, then store if R2 is nonzero in R2, then
+	(compile_exp e1) @ [Beq(R3, R0, l); La(R4, t); Sw(R3, R4, zero)] 
+	(* Recover e1 from t into R4, meanwhile return value of e2 is in R3 *)
+	@ (compile_exp e2) @ [La(R4, t); Lw(R4, R4, zero)]
+	(* Store if R4 is nonzero in R4, then store if R3 is nonzero in R3, then
 		bitwise and the result *)
-	@ [Label l; Sne(R3, R3, R0); Sne(R2, R2, R0); Mips.And(R2, R2, Reg(R3))])
+	@ [Label l; Sne(R4, R4, R0); Sne(R3, R3, R0); Mips.And(R3, R3, Reg(R4))])
 
     | Or(e1, e2) -> 
 	(let t = new_temp() in 
 	let l = new_label() in
 	(* If e1 != 0 jump directly to end, otherwise store return value of e1 into t *)
-	(compile_exp e1) @ [Bne(R2, R0, l); La(R3, t); Sw(R2, R3, zero)] 
-	(* Recover e1 from t into R3, meanwhile return value of e2 is in R2 *)
-	@ (compile_exp e2) @ [La(R3, t); Lw(R3, R3, zero)]
-	(* Store if R3 is nonzero in R3, then store if R2 is nonzero in R2, then
+	(compile_exp e1) @ [Bne(R3, R0, l); La(R4, t); Sw(R3, R4, zero)] 
+	(* Recover e1 from t into R4, meanwhile return value of e2 is in R3 *)
+	@ (compile_exp e2) @ [La(R4, t); Lw(R4, R4, zero)]
+	(* Store if R4 is nonzero in R4, then store if R3 is nonzero in R3, then
 		bitwise or the result *)
-	@ [Label l; Sne(R3, R3, R0); Sne(R2, R2, R0); Mips.Or(R2, R2, Reg(R3))])
+	@ [Label l; Sne(R4, R4, R0); Sne(R3, R3, R0); Mips.Or(R3, R3, Reg(R4))])
 
-    | Assign(x, e) -> (compile_exp e) @ [La(R3, x); Sw(R2, R3, zero)] 
+    | Assign(x, e) -> (compile_exp e) @ [La(R4, x); Sw(R3, R4, zero)] 
 
 let rec compile_stmt ((s,_):Ast.stmt) : inst list = 
     match s with
@@ -127,7 +127,7 @@ let rec compile_stmt ((s,_):Ast.stmt) : inst list =
     | If(e,s1,s2) ->
         (let else_1 = new_label() in
         let end_l = new_label() in
-        (compile_exp e) @ [Beq(R2, R0, else_1)] @
+        (compile_exp e) @ [Beq(R3, R0, else_1)] @
         (compile_stmt s1) @ [J end_l; Label else_1] @
         (compile_stmt s2) @ [Label(end_l)])
     | While(e,s) ->
@@ -137,10 +137,10 @@ let rec compile_stmt ((s,_):Ast.stmt) : inst list =
         (compile_stmt s) @
         [Label test_l] @
         (compile_exp e) @
-        [Bne(R2,R0,top_l)])
+        [Bne(R3,R0,top_l)])
     | For(e1,e2,e3,s) ->
         compile_stmt((Seq((Exp e1, 0),(While(e2,(Seq(s,(Exp e3,0)),0)), 0)), 0)) 
-    | Return(e) -> (compile_exp e) @ [Jr(R31)]
+    | Return(e) -> (compile_exp e) @ [Mips.Seq(R2, R3, R3); Jr(R31)]
 
 (* compiles Fish AST down to MIPS instructions and a list of global vars *)
 let compile (p : Ast.program) : result = 
