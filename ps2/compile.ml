@@ -116,30 +116,6 @@ let rec compile_exp ((e , _) : Ast.exp) : inst list =
 
     | Assign(x, e) -> (compile_exp e) @ [La(R3, x); Sw(R2, R3, zero)] 
 
-(* Compile statement example code 
-let rec stmt2mips(s:stmt):inst list =
-match s with
-| Exp e ->
-exp2mips e
-| Seq(s1,s2) ->
-(stmt2mips s1) @ (stmt2mips s2)
-| If(e,s1,s2) ->
-(let else_l = new_label() in
-let end_l = new_label() in
-(exp2mips e) @ [Beq(R2,R0,else_l)] @
-(stmt2mips s1) @ [J end_l,Label else_l] @
-(stmt2mips s2) @ [Label end_l])
-| While(e,s) ->
-(let test_l = new_label() in
-let top_l = new_label() in
-[J test_l, Label top_l] @
-(stmt2mips s) @
-[Label test_l] @
-(exp2mips e) @
-[Bne(R2,R0,top_l)])
-| For(e1,e2,e3,s) ->
-stmt2mips(Seq(Exp e1,While(e2,Seq(s,Exp e3)))) *)
-
 let rec compile_stmt ((s,_):Ast.stmt) : inst list = 
     match s with
     | Exp(e) -> compile_exp e
