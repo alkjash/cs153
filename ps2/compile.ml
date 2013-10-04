@@ -124,19 +124,19 @@ let rec compile_stmt ((s,_):Ast.stmt) : inst list =
         (let else_1 = new_label() in
         let end_l = new_label() in
         (compile_exp e) @ [Beq(R2, R0, else_1)] @
-        (compile_stmt s1) @ [J end_l, Label else_1] @
-        (compile_stmt s2) @ [Label end_l])
+        (compile_stmt s1) @ [J end_l; Label else_1] @
+        (compile_stmt s2) @ [Label(end_l)])
     | While(e,s) ->
         (let test_l = new_label() in
         let top_l = new_label() in
-        [J test_l, Label top_l] @
+        [J test_l; Label top_l] @
         (compile_stmt s) @
         [Label test_l] @
         (compile_exp e) @
         [Bne(R2,R0,top_l)])
     | For(e1,e2,e3,s) ->
-        compile_stmt(Seq(Exp e1,While(e2,Seq(s,Exp e3)))) 
-    | Return(e) -> raise IMPLEMENT_ME
+        compile_stmt((Seq((Exp e1, 0),(While(e2,(Seq(s,(Exp e3,0)),0)), 0)), 0)) 
+    | Return(e) -> (compile_exp e) @ [Jr(R31)]
 
 (* compiles Fish AST down to MIPS instructions and a list of global vars *)
 let compile (p : Ast.program) : result = 
