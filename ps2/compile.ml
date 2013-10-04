@@ -103,7 +103,9 @@ let rec compile_exp ((e , _) : Ast.exp) : inst list =
 	(compile_exp e1) @ [Beq(R2, R0, l); La(R3, t); Sw(R2, R3, zero)] 
 	(* Recover e1 from t into R3, meanwhile return value of e2 is in R2 *)
 	@ (compile_exp e2) @ [La(R3, t); Lw(R3, R3, zero)]
-	@ [Label l; Mips.And(R2, R2, Reg(R3))])
+	(* Store if R3 is nonzero in R3, then store if R2 is nonzero in R2, then
+		bitwise and the result *)
+	@ [Label l; Sne(R3, R3, R0); Sne(R2, R2, R0); Mips.And(R2, R2, Reg(R3))])
 
     | Or(e1, e2) -> 
 	(let t = new_temp() in 
@@ -112,7 +114,9 @@ let rec compile_exp ((e , _) : Ast.exp) : inst list =
 	(compile_exp e1) @ [Bne(R2, R0, l); La(R3, t); Sw(R2, R3, zero)] 
 	(* Recover e1 from t into R3, meanwhile return value of e2 is in R2 *)
 	@ (compile_exp e2) @ [La(R3, t); Lw(R3, R3, zero)]
-	@ [Label l; Mips.Or(R2, R2, Reg(R3))])
+	(* Store if R3 is nonzero in R3, then store if R2 is nonzero in R2, then
+		bitwise or the result *)
+	@ [Label l; Sne(R3, R3, R0); Sne(R2, R2, R0); Mips.Or(R2, R2, Reg(R3))])
 
     | Assign(x, e) -> (compile_exp e) @ [La(R3, x); Sw(R2, R3, zero)] 
 
