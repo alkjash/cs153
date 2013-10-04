@@ -140,7 +140,7 @@ let rec compile_stmt ((s,_):Ast.stmt) : inst list =
         [Bne(R3,R0,top_l)])
     | For(e1,e2,e3,s) ->
         compile_stmt((Seq((Exp e1, 0),(While(e2,(Seq(s,(Exp e3,0)),0)), 0)), 0)) 
-    | Return(e) -> (compile_exp e) @ [Mips.Seq(R2, R3, R3); Jr(R31)]
+    | Return(e) -> (compile_exp e) @ [Mips.Add(R2, R3, Reg(R0)); Jr(R31)]
 
 (* compiles Fish AST down to MIPS instructions and a list of global vars *)
 let compile (p : Ast.program) : result = 
