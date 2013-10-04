@@ -73,7 +73,7 @@ let rec compile_exp ((e , _) : Ast.exp) : inst list =
     match e with
       Int j -> [Li(R3, Word32.fromInt j)]
 
-    | Var x -> [La(R3, x); Lw(R3, R3, zero)]
+    | Var x -> [La(R3, "MOO" ^ x); Lw(R3, R3, zero)]
 
     | Binop(e1, op, e2) -> 
 	(let t = new_temp() in 
@@ -118,7 +118,7 @@ let rec compile_exp ((e , _) : Ast.exp) : inst list =
 		bitwise or the result *)
 	@ [Label l; Sne(R4, R4, R0); Sne(R3, R3, R0); Mips.Or(R3, R3, Reg(R4))])
 
-    | Assign(x, e) -> (compile_exp e) @ [La(R4, x); Sw(R3, R4, zero)] 
+    | Assign(x, e) -> (compile_exp e) @ [La(R4, "MOO" ^ x); Sw(R3, R4, zero)] 
 
 let rec compile_stmt ((s,_):Ast.stmt) : inst list = 
     match s with
