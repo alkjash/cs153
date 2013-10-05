@@ -68,7 +68,7 @@ let rec collect_vars (p : Ast.program) : unit =
 let zero = Word32.fromInt 0
 
 (* The only guarantee we make of an expression is that R3 is stored with its value after it is 
-   finished evaluating. It may or may not clobber all the other registers in the process *)
+   finished evaluating. It may or may not clobber R4 in the process *)
 let rec compile_exp ((e , _) : Ast.exp) : inst list =
     match e with
       Int j -> [Li(R3, Word32.fromInt j)]
@@ -138,8 +138,10 @@ let rec compile_stmt ((s,_):Ast.stmt) : inst list =
         [Label test_l] @
         (compile_exp e) @
         [Bne(R3,R0,top_l)])
+	(* Rewrite For as a While loop *)
     | For(e1,e2,e3,s) ->
         compile_stmt((Seq((Exp e1, 0),(While(e2,(Seq(s,(Exp e3,0)),0)), 0)), 0)) 
+	(* Store the result of R3 into R2 for return *)
     | Return(e) -> (compile_exp e) @ [Mips.Add(R2, R3, Reg(R0)); Jr(R31)]
 
 (* compiles Fish AST down to MIPS instructions and a list of global vars *)
