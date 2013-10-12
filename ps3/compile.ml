@@ -16,8 +16,20 @@ let new_label() = "L" ^ (string_of_int (new_int()))
 
 (* varmap: immutable association list of vars and offsets *)
 type varmap = (Ast.var * int) list
-(* TODO:
-   Define empty_varmap(), insert_var(), lookup_var() *)
+
+let empty_varmap = [] 
+
+let insert_var (vm : varmap) (v : Ast.var) (offset : int) : varmap =
+	(v, offset) :: vm 
+
+exception NotFound
+
+let rec lookup_var (vm : varmap) (v : Ast.var) : int =
+	match vm with
+	  [] -> NotFound
+	| h::t -> match h with
+				  (v, o) -> o
+				| _ -> lookup_var t v
 
 type env = {varmap : varmap}
 
