@@ -26,6 +26,15 @@ let empty_varmap = []
 let insert_var (vm : varmap) (v : Ast.var) (offset : int) : varmap =
 	("MOO" ^ v, offset) :: vm 
 
+let vm_newscope (vm : varmap) : varmap =
+	("BRACE", 0) :: vm
+
+let rec vm_endscope (vm : varmap) : varmap = 
+	match vm with
+	  ("BRACE", 0) :: t -> t
+	| _ :: t -> vm_endscope t
+	| [] -> []
+
 (* Returns -1 if not found, otherwise positive offset *)
 let rec lookup_var (vm : varmap) (v : Ast.var) : int =
 	let var = "MOO" ^ v in
