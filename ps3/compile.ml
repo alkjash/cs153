@@ -50,19 +50,24 @@ type env = {varmap : varmap; epilogue : Mips.label}
    Association list (var * int) which keeps track of where temporary variables are
    with respect to frame pointer. int is the number of words from the frame pointer
    where the base of var starts. *)
+let rec args_list (args : var list) : env =
+  | h::t -> (h,R29-R30) @ make_env t
+  | _ -> []
+
 let rec make_env (f : Ast.func) : env =
-	raise IMPLEMENT_ME
+	args_list f.args
+
 
 (* push and pop: wrappers for pushing and popping temps off of the stack *)
 (* push writes assembly code down that pushes the value of register r onto the current
    sp and updating sp *)
 let push (r : Mips.reg) : Mips.inst list =
-	raise IMPLEMENT_ME
+	[Sw(r,R29,zero); Add(R29,R29,4)]
 
 (* pop writes assembly code down that pops off the top of sp into register r and decrements
    sp *)
 let pop (r : Mips.reg) : Mips.inst list =
-	raise IMPLEMENT_ME
+	[La(r,R29,zero); Lw(r,r,zero); Sub(R29,R29,4)]
 
 (* Set up stack frame for new procedure; calls make_env to set up local variables first *)
 let frame_start (f : Ast.func) : Mips.inst list =
