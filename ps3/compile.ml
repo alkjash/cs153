@@ -40,7 +40,7 @@ let rec lookup_var (vm : varmap) (v : Ast.var) : int =
 	let var = "MOO" ^ v in
 	match vm with
 	  [] -> -1
-	| h::t -> (fun (v2, o) -> if v2 = var then o else
+	| h :: t -> (fun (v2, o) -> if v2 = var then o else
 		lookup_var t v) h
 
 type env = {varmap : varmap; epilogue : Mips.label}
