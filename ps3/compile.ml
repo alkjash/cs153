@@ -14,24 +14,27 @@ let new_label() = "L" ^ (string_of_int (new_int()))
 
 (************ Environment and variable map declarations ****************)
 
-(* varmap: immutable association list of vars and offsets *)
+(* varmap: immutable association list of vars and offsets
+	For scopes we implement the following addition: in varmap we add
+	("BRACE", 0) to indicate that a new lbrace has been hit and a scope
+	change is involved. This is for the sake of knowing which variables to
+	pop out of the varmap when we hit an end brace and scope change. *)
 type varmap = (Ast.var * int) list
 
 let empty_varmap = [] 
 
 let insert_var (vm : varmap) (v : Ast.var) (offset : int) : varmap =
-	(v, offset) :: vm 
+	("MOO" ^ v, offset) :: vm 
 
-exception NotFound
-
+(* Returns -1 if not found, otherwise positive offset *)
 let rec lookup_var (vm : varmap) (v : Ast.var) : int =
+	let var = "MOO" ^ v in
 	match vm with
-	  [] -> NotFound
-	| h::t -> match h with
-				  (v, o) -> o
-				| _ -> lookup_var t v
+	  [] -> -1
+	| h::t -> (fun (v2, o) -> if v2 = var then o else
+		lookup_var t v) h
 
-type env = {varmap : varmap}
+type env = {varmap : varmap; epilogue : Mips.label}
 
 (************ Helper functions *****************************************)
 (* make_env(): create environment for a function, passing through the code once:
@@ -64,6 +67,7 @@ let compile_func (f : Ast.func) : Mips.inst list =
 (* TODO: More subfunctions needed: frame_end, frame_save *)
 
 (************* Compile *************************************************)
+(*
 (* sets of variables -- Ocaml Set and Set.S *)
 module VarSet = Set.Make(struct
                            type t = Ast.var
@@ -80,8 +84,6 @@ let rec new_temp() =
     if VarSet.mem t (!variables) then new_temp()
     else (variables := VarSet.add t (!variables); t)
 
-(* reset internal state *)
-let reset() = (label_counter := 0; variables := VarSet.empty)
 
 (* Helper to add a variable to the variables Set; Prepends "MOO" to variable names
  * to avoid conflicts with MIPs codes *)
@@ -195,13 +197,15 @@ let rec compile_stmt ((s,_):Ast.stmt) : inst list =
         compile_stmt((Seq((Exp e1, 0),(While(e2,(Seq(s,(Exp e3,0)),0)), 0)), 0)) 
   (* Store the result of R3 into R2 for return *)
     | Return(e) -> (compile_exp e) @ [Mips.Add(R2, R3, Reg(R0)); Jr(R31)]
+*)
 
-(* compiles Fish AST down to MIPS instructions and a list of global vars *)
+(* compiles Cish AST down to MIPS instructions; Cish has no global variables *)
 let compile (p : Ast.program) : result = 
-    let _ = reset() in
-    let _ = collect_vars(p) in
-    let insts = (Label "main") :: (compile_stmt p) in
-    { code = insts; data = VarSet.elements (!variables) }
+	let rec compile_flist (flist : Ast.func list) : Mips.inst list =
+	match p with
+	  [] -> []
+	| h::t -> (compile_func h) @ (compile_flist t) in
+	{ code = (Mips.Jal("main") :: (compile_flist p)); data = [] }
 
 let result2string (res : result) : string = 
     let code = res.code in
