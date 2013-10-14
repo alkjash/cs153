@@ -3,6 +3,8 @@ open Mips
 open Ast
 
 exception IMPLEMENT_ME
+exception UNBOUND
+exception FUNC_ERROR
 
 type result = { code : Mips.inst list;
                 data : Mips.label list }
@@ -11,6 +13,22 @@ type result = { code : Mips.inst list;
 let label_counter = ref 0
 let new_int() = (label_counter := (!label_counter) + 1; !label_counter)
 let new_label() = "L" ^ (string_of_int (new_int()))
+
+(************ Function Name and Argument # checking ********************)
+(* Utilities to check that function calls give a valid function name and the correct
+   number of elements *)
+let flist_ref = ref []
+
+let add_func (fsig : Ast.funcsig) : unit =
+	let nargs = List.length fsig.args in
+	(flist_ref := ((fsig.name, nargs) :: (!flist_ref)); ())
+
+let check_func (f : Ast.var) (n : int) : unit =
+	let rec check_list l =
+		match l with
+		  [] -> raise FUNC_ERROR
+		| h::t -> if h = (f, n) then () else check_list t in
+	check_list (!flist_ref)
 
 (************ Environment and variable map declarations ****************)
 
@@ -36,7 +54,7 @@ let vm_delete (vm : varmap) : varmap =
 (* Returns -1 if not found, otherwise positive offset *)
 let rec vm_lookup (vm : varmap) (v : Ast.var) : int =
 	match vm with
-	  [] -> -1
+	  [] -> raise UNBOUND
 	| h :: t -> (fun (v2, o) -> if v2 = v then o else
 		vm_lookup t v) h
 
@@ -132,6 +150,8 @@ let rec compile_exp ((e , _) : Ast.exp) (en : env) : inst list =
    	which can be thought of
    	as just having the caller save them onto the stack for the callee instead of letting the
    	callee save them, as it would probably do anyways. *)
+	(* Check that the function exists and takes the right number of arguments *)
+	let _ = check_func f (List.length arglist) in
 	(* Compile each argument expression individually and push value onto stack *)
 	let ilistlist = List.map (fun e -> (compile_exp e en) @ (push R3)) arglist in
 	(* Concatenate expression code all together *)
@@ -248,6 +268,7 @@ let compile_func (f : Ast.func) : Mips.inst list =
 (************* Compile *************************************************)
 (* compiles Cish AST down to MIPS instructions; Cish has no global variables *)
 let compile (p : Ast.program) : result = 
+	let _ = List.map (fun (Fn fsig) -> (add_func fsig)) p in
 	let code = List.fold_right (fun a b -> a @ b) (List.map compile_func p) [] in
 	{ code = (Jal("main") :: code); data = [] }
 
