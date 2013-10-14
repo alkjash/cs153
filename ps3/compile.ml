@@ -20,6 +20,7 @@ let new_label() = "L" ^ (string_of_int (new_int()))
 
 let flist_ref = ref []
 
+(* First check if function already defined, if not add it to list *)
 let add_func (fsig : Ast.funcsig) : unit =
 	let flist = !flist_ref in
 	let rec find_f l =
@@ -48,24 +49,32 @@ type varmap = (Ast.var * int) list
 
 let empty_varmap = [] 
 
-(* Insert a new 4-word variable which has offset equal to 4 more than the last one *)
-let vm_insert (vm : varmap) (v : Ast.var) : varmap =
-	let offset = match vm with
-	  h::t -> (snd h) + 4
-	| [] -> 4 in
-	(v, offset) :: vm 
+type env = {varmap : varmap; offset : int; epilogue : Mips.label}
 
-let vm_delete (vm : varmap) : varmap =
-	List.tl vm
+let empty_env = {varmap = empty_varmap; offset = 0; epilogue = "DUMMY"}
 
-(* Returns -1 if not found, otherwise positive offset *)
-let rec vm_lookup (vm : varmap) (v : Ast.var) : int =
-	match vm with
-	  [] -> raise UNBOUND
-	| h :: t -> (fun (v2, o) -> if v2 = v then o else
-		vm_lookup t v) h
+(* Pointer to current environment; offset identifies the current difference between sp and fp *)
+let cur_env = ref empty_env
 
-type env = {varmap : varmap; epilogue : Mips.label}
+(* Insert a new 4-word variable based on the current offset *)
+let vm_insert (v : Ast.var) : unit =
+	let env = !cur_env in
+	cur_env := {varmap = (v, env.offset) :: env.varmap; offset = env.offset; epilogue = env.epilogue}
+
+let vm_delete () : unit =
+	let env = !cur_env in
+	(cur_env := {varmap = List.tl env.varmap; offset = env.offset; epilogue = env.epilogue}; ())
+
+(* Raises UNBOUND if not found, otherwise positive offset *)
+let vm_lookup (v : Ast.var) : int =
+	let env = !cur_env in
+	let vm = env.varmap in
+	let rec search l =
+		match l with
+		  [] -> raise UNBOUND
+		| h :: t -> (fun (v2, o) -> if v2 = v then o else
+			search t) h in
+	search vm
 
 (************ Helpers **************************************************)
 
@@ -75,11 +84,15 @@ let zero = Word32.fromInt 0
 (* push writes assembly code down that pushes the value of register r onto the current
    sp and updating sp *)
 let push (r : Mips.reg) : Mips.inst list =
+	let env = !cur_env in
+	let _ = (cur_env := {varmap = env.varmap; offset = (env.offset + 4); epilogue = env.epilogue}) in
 	[Add(R29,R29, Immed(Word32.fromInt (-4))); Sw(r, R29, zero)]
 
 (* pop writes assembly code down that pops off the top of sp into register r and decrements
    sp *)
 let pop (r : Mips.reg) : Mips.inst list =
+	let env = !cur_env in
+	let _ = (cur_env := {varmap = env.varmap; offset = (env.offset - 4); epilogue = env.epilogue}) in
 	[Lw(r, R29, zero); Add(R29, R29, Immed(Word32.fromInt 4))]
 
 (************ Statement-Level Compilation ******************************)
@@ -95,20 +108,19 @@ let pop (r : Mips.reg) : Mips.inst list =
    Because our code is written in such a way that any expression is free to clobber any
    registers except R3, we don't need to worry about storing caller registers before
    performing a function call *)
-let rec compile_exp ((e , _) : Ast.exp) (en : env) : inst list =
-	let vm = en.varmap in
+let rec compile_exp ((e , _) : Ast.exp) : inst list =
     match e with
       Int j -> [Li(R3, Word32.fromInt j)]
 
     | Var x -> 
-	let offset = vm_lookup vm x in
+	let offset = vm_lookup x in
 	[Add(R3, R30, Immed(Word32.fromInt (-offset))); Lw(R3, R3, zero)]
 
     | Binop(e1, op, e2) -> 
     (* Push value of e1 onto stack *)
-    (compile_exp e1 en) @ (push R3)
+    (compile_exp e1) @ (push R3)
     (* Pop e1 into R4, meanwhile return value of e2 is in R3 *)
-    @ (compile_exp e2 en) @ (pop R4)
+    @ (compile_exp e2) @ (pop R4)
     @ (match op with
     	  Plus -> [Add(R3, R4, Reg R3)]
     	| Minus -> [Sub(R3, R4, R3)]
@@ -123,14 +135,14 @@ let rec compile_exp ((e , _) : Ast.exp) (en : env) : inst list =
     )
 
     | Not(e) -> 
-	(compile_exp e en) @ [Mips.Seq(R3, R3, R0)] (* Set R3 to 1 if zero, zero otherwise *)
+	(compile_exp e) @ [Mips.Seq(R3, R3, R0)] (* Set R3 to 1 if zero, zero otherwise *)
 
     | And(e1, e2) -> 
     let l = new_label() in
     (* If e1 = 0 jump directly to end, otherwise push it to stack *)
-    (compile_exp e1 en) @ [Beq(R3, R0, l)] @ (push R3)
+    (compile_exp e1) @ [Beq(R3, R0, l)] @ (push R3)
     (* Recover e1 from stack into R4, meanwhile return value of e2 is in R3 *)
-    @ (compile_exp e2 en) @ (pop R4)
+    @ (compile_exp e2) @ (pop R4)
     (* Store if R4 is nonzero in R4, then store if R3 is nonzero in R3, then
       bitwise and the result *)
     @ [Label l; Sne(R4, R4, R0); Sne(R3, R3, R0); Mips.And(R3, R3, Reg(R4))]
@@ -138,16 +150,16 @@ let rec compile_exp ((e , _) : Ast.exp) (en : env) : inst list =
     | Or(e1, e2) -> 
     let l = new_label() in
     (* If e1 != 0 jump directly to end, otherwise push it to stack *)
-    (compile_exp e1 en) @ [Bne(R3, R0, l)] @ (push R3) 
+    (compile_exp e1) @ [Bne(R3, R0, l)] @ (push R3) 
     (* Recover e1 from stack into R4, meanwhile return value of e2 is in R3 *)
-    @ (compile_exp e2 en) @ (pop R4)
+    @ (compile_exp e2) @ (pop R4)
     (* Store if R4 is nonzero in R4, then store if R3 is nonzero in R3, then
       bitwise or the result *)
     @ [Label l; Sne(R4, R4, R0); Sne(R3, R3, R0); Mips.Or(R3, R3, Reg(R4))]
 
     | Assign(x, e) -> 
-	let offset = vm_lookup vm x in
-	(compile_exp e en) @ [Add(R4, R30, Immed(Word32.fromInt (-offset))); Sw(R3, R4, zero)] 
+	let offset = vm_lookup x in
+	(compile_exp e) @ [Add(R4, R30, Immed(Word32.fromInt (-offset))); Sw(R3, R4, zero)] 
 
 	| Call (f, arglist) ->
 	(* Pushes the arguments for a function to the stack before calling it; moves stack pointer back
@@ -160,7 +172,7 @@ let rec compile_exp ((e , _) : Ast.exp) (en : env) : inst list =
 	(* Check that the function exists and takes the right number of arguments *)
 	let _ = check_func f (List.length arglist) in
 	(* Compile each argument expression individually and push value onto stack *)
-	let ilistlist = List.map (fun e -> (compile_exp e en) @ (push R3)) arglist in
+	let ilistlist = List.map (fun e -> (compile_exp e) @ (push R3)) arglist in
 	(* Concatenate expression code all together *)
 	let ilist = List.fold_right (fun a b -> a @ b) ilistlist [] in
 	(* Shift sp to before arguments *)
@@ -168,44 +180,47 @@ let rec compile_exp ((e , _) : Ast.exp) (en : env) : inst list =
 	(* After return store value of R2 (f's return value) into R3 *)
 	Jal("FUNC" ^ f); Add(R3, R2, Immed(zero))]
 
-let rec compile_stmt ((s,_):Ast.stmt) (en : env) : (inst list * env) = 
+let rec compile_stmt ((s,_):Ast.stmt) : inst list = 
+	let en = !cur_env in
     match s with
     | Exp(e) -> 
-		(compile_exp e en, en)
+		compile_exp e
     | Seq(s1,s2) -> 
-		let (ilist1, en) = compile_stmt s1 en in
-		let (ilist2, en) = compile_stmt s2 en in
-		((ilist1 @ ilist2), en)
+		let ilist1 = compile_stmt s1 in
+		let ilist2 = compile_stmt s2 in
+		ilist1 @ ilist2
     | If(e,s1,s2) ->
         let else_1 = new_label() in
         let end_l = new_label() in
-		let ilist1 = compile_exp e en in
-		let (ilist2, en) = compile_stmt s1 en in
-		let (ilist3, en) = compile_stmt s2 en in
-		((ilist1 @ [Beq(R3, R0, else_1)] @
+		let ilist1 = compile_exp e in
+		let ilist2 = compile_stmt s1 in
+		let ilist3 = compile_stmt s2 in
+		(ilist1 @ [Beq(R3, R0, else_1)] @
         ilist2 @ [J end_l; Label else_1] @
-        ilist3 @ [Label(end_l)]), en)
+        ilist3 @ [Label(end_l)])
     | While(e,s) ->
         let test_l = new_label() in
         let top_l = new_label() in
-		let (ilist, en) = compile_stmt s en in
-        (([J test_l; Label top_l] @
+		let ilist = compile_stmt s in
+        ([J test_l; Label top_l] @
         ilist @ [Label test_l] @
-        (compile_exp e en) @
-        [Bne(R3,R0,top_l)]), en)
+        (compile_exp e) @
+        [Bne(R3,R0,top_l)])
     (* Rewrite For as a While loop *)
     | For(e1,e2,e3,s) ->
-        compile_stmt (Seq((Exp e1, 0),(While(e2,(Seq(s,(Exp e3,0)),0)), 0)), 0) en
+        compile_stmt (Seq((Exp e1, 0),(While(e2,(Seq(s,(Exp e3,0)),0)), 0)), 0)
 	| Let(v, e, s) ->
-		(* Create a new sub-environment en2 with extra variable to execute s in *)
-		((compile_exp e en) @ (push R3) @
-		(let vm2 = vm_insert en.varmap v in 
-		let en2 = {varmap = vm2; epilogue = en.epilogue} in 
-		fst (compile_stmt s en2)) @ (pop R3), en) (* Store the value computed for v into R3 *)
+		(* Create a new sub-environment with extra variable to execute s in, then restore
+			original cur_env *)
+		let res = (compile_exp e) @ (push R3) @
+		(let _ = vm_insert v in 
+		compile_stmt s) @ (pop R3) in
+		(* Store the value computed for v into R3 *)
+		(cur_env := en; res) (* restore old environment *)
     (* Store the result of R3 into R2 for return, then jump to epilogue;
 	   We store it in R16 as well solely for debugging purposes *)
-    | Return(e) -> (((compile_exp e en) @ [Mips.Add(R2, R3, Reg(R0)); 
-			Mips.Add(R16, R3, Reg(R0)); J(en.epilogue)]), en) 
+    | Return(e) -> (compile_exp e) @ [Mips.Add(R2, R3, Reg(R0)); 
+			Mips.Add(R16, R3, Reg(R0)); J(en.epilogue)]
 
 (************ Procedure-Level Compilation ******************************)
 (* Stack Frame setup for prologue:
@@ -225,33 +240,39 @@ let rec compile_stmt ((s,_):Ast.stmt) (en : env) : (inst list * env) =
 
 (* make_env(): create environment for a function, just adds the arguments to the varmap
    and creates an epilogue label *)
-let make_env (fsig : Ast.funcsig) : env =
+let make_env (fsig : Ast.funcsig) : unit =
+	let _ = (cur_env := empty_env) in
 	let rec add_args alist =
 		match alist with
-		  [] -> empty_varmap
+		  [] -> ()
 		| h::t -> 
-			let vm = add_args t in
-			vm_insert vm h in
+			let _ = add_args t in
+			let env = !cur_env in
+			let _ = (cur_env := 
+			{varmap = env.varmap; offset = (env.offset + 4); epilogue = env.epilogue}) in
+			vm_insert h in
 	let ep = new_label() in
-	{varmap = add_args fsig.args; epilogue = ep}
+	let en = !cur_env in
+	(cur_env := {varmap = en.varmap; offset = en.offset; epilogue = ep}; ())
 
 (* Prologue *)
-let frame_start (fsig : Ast.funcsig) (e : env) : (Mips.inst list * env) =
+let frame_start (fsig : Ast.funcsig) : Mips.inst list =
 	let nargs = List.length fsig.args in
-	let vm = e.varmap in
-	let vm = vm_insert vm "CALLER_FRAME_POINTER" in
-	let vm = vm_insert vm "RETURN_ADDRESS" in
+	let _ = (push R0) in
+	let _ = vm_insert "CALLER_FRAME_POINTER" in
+	let _ = (push R0) in
+	let _ = vm_insert "RETURN_ADDRESS" in
 	(* Save old frame pointer R30 into stack, make old stack pointer new frame pointer, shift
        stack pointer down the size of nargs (and two more by the pushes) words *)
 	let ilist = 
 		[Add(R3, R30, Reg R0); Add(R30, R29, Reg R0); Li(R4, Word32.fromInt(nargs * 4));
 		  Sub(R29, R29, R4)] in
-	(ilist @ (push R3) @ (push R31), {varmap = vm; epilogue = e.epilogue}) 
+	ilist @ (push R3) @ (push R31) 
 
 (* Epilogue *)
-let frame_end (fsig : Ast.funcsig) (e : env) : Mips.inst list =
-	let caller_fp = vm_lookup e.varmap "CALLER_FRAME_POINTER" in
-	let ra = vm_lookup e.varmap "RETURN_ADDRESS" in
+let frame_end (fsig : Ast.funcsig) : Mips.inst list =
+	let caller_fp = vm_lookup "CALLER_FRAME_POINTER" in
+	let ra = vm_lookup "RETURN_ADDRESS" in
 	(* Load correct return address *)
 	[Add(R3, R30, Immed(Word32.fromInt (-ra))); Lw(R31, R3, zero);
 	(* Move sp up to fp *)	
@@ -263,12 +284,13 @@ let frame_end (fsig : Ast.funcsig) (e : env) : Mips.inst list =
    body of procedure, then makes epilogue for return *)
 let compile_func (f : Ast.func) : Mips.inst list =
 	let Fn(fsig) = f in
-	let env = make_env fsig in
-	let (ilist, env) = frame_start fsig env in
+	let _ = make_env fsig in
+	let ilist = frame_start fsig in
 	let name = if fsig.name = "main" then "main" else "FUNC" ^ fsig.name in
 	let prologue = (Label name) :: ilist in 
-	let (body, _) = compile_stmt fsig.body env in
-	let ilist2 = frame_end fsig env in
+	let body = compile_stmt fsig.body in
+	let ilist2 = frame_end fsig in
+	let env = !cur_env in
 	let epilogue = (Label env.epilogue) :: ilist2 in
 	prologue @ body @ epilogue
 	
@@ -277,7 +299,7 @@ let compile_func (f : Ast.func) : Mips.inst list =
 let compile (p : Ast.program) : result = 
 	let _ = List.map (fun (Fn fsig) -> (add_func fsig)) p in
 	let code = List.fold_right (fun a b -> a @ b) (List.map compile_func p) [] in
-	{ code = (Jal("main") :: code); data = [] }
+	{ code = code; data = [] }
 
 let result2string (res : result) : string = 
     let code = res.code in
