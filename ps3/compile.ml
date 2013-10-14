@@ -17,9 +17,16 @@ let new_label() = "L" ^ (string_of_int (new_int()))
 (************ Function Name and Argument # checking ********************)
 (* Utilities to check that function calls give a valid function name and the correct
    number of elements *)
+
 let flist_ref = ref []
 
 let add_func (fsig : Ast.funcsig) : unit =
+	let flist = !flist_ref in
+	let rec find_f l =
+		match l with
+		  [] -> true 
+		| h::t -> if fst h = fsig.name then false else find_f t in
+	if find_f flist = false then raise FUNC_ERROR else
 	let nargs = List.length fsig.args in
 	(flist_ref := ((fsig.name, nargs) :: (!flist_ref)); ())
 
