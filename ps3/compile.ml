@@ -172,7 +172,7 @@ let rec compile_stmt ((s,_):Ast.stmt) (en : env) : (inst list * env) =
     | For(e1,e2,e3,s) ->
         compile_stmt (Seq((Exp e1, 0),(While(e2,(Seq(s,(Exp e3,0)),0)), 0)), 0) en
 	| Let(v, e, s) ->
-		raise IMPLEMENT_ME
+		(compile_exp e en) @ [La(R4, v); Sw(R3, R4, zero)] @ (compile_stmt s en)
     (* Store the result of R3 into R2 for return, then jump to epilogue *)
     | Return(e) -> (((compile_exp e en) @ [Mips.Add(R2, R3, Reg(R0)); Jr(epilogue)]), en) 
 
