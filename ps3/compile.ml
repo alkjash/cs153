@@ -105,10 +105,14 @@ let rec compile_exp ((e , _) : Ast.exp) (en : env) : inst list =
 	[Add(R3, R30, Immed(Word32.fromInt (-offset))); Lw(R3, R3, zero)]
 
     | Binop(e1, op, e2) -> 
+	(* code to account for offset change: push a temp to varmap whenever we push a temporary variable *)
+	let vm = en.varmap in
+	let vm = vm_insert vm "TMP" in
+	let en2 = {varmap = vm; epilogue = en.epilogue} in
     (* Push value of e1 onto stack *)
     (compile_exp e1 en) @ (push R3)
     (* Pop e1 into R4, meanwhile return value of e2 is in R3 *)
-    @ (compile_exp e2 en) @ (pop R4)
+    @ (compile_exp e2 en2) @ (pop R4)
     @ (match op with
     	  Plus -> [Add(R3, R4, Reg R3)]
     	| Minus -> [Sub(R3, R4, R3)]
@@ -127,20 +131,29 @@ let rec compile_exp ((e , _) : Ast.exp) (en : env) : inst list =
 
     | And(e1, e2) -> 
     let l = new_label() in
+	(* code to account for offset change: push a temp to varmap whenever we push a temporary variable *)
+	let vm = en.varmap in
+	let vm = vm_insert vm "TMP" in
+	let en2 = {varmap = vm; epilogue = en.epilogue} in
     (* If e1 = 0 jump directly to end, otherwise push it to stack *)
     (compile_exp e1 en) @ [Beq(R3, R0, l)] @ (push R3)
     (* Recover e1 from stack into R4, meanwhile return value of e2 is in R3 *)
-    @ (compile_exp e2 en) @ (pop R4)
+    @ (compile_exp e2 en2) @ (pop R4)
     (* Store if R4 is nonzero in R4, then store if R3 is nonzero in R3, then
       bitwise and the result *)
     @ [Label l; Sne(R4, R4, R0); Sne(R3, R3, R0); Mips.And(R3, R3, Reg(R4))]
 
     | Or(e1, e2) -> 
     let l = new_label() in
+	(* code to account for offset change: push a temp to varmap whenever we push a temporary variable *)
+	let vm = en.varmap in
+	let vm = vm_insert vm "TMP" in
+	let en2 = {varmap = vm; epilogue = en.epilogue} in
     (* If e1 != 0 jump directly to end, otherwise push it to stack *)
-    (compile_exp e1 en) @ [Bne(R3, R0, l)] @ (push R3) 
+    (compile_exp e1 en) @ [Bne(R3, R0, l)] @ 
+	(push R3)  
     (* Recover e1 from stack into R4, meanwhile return value of e2 is in R3 *)
-    @ (compile_exp e2 en) @ (pop R4)
+    @ (compile_exp e2 en2) @ (pop R4)
     (* Store if R4 is nonzero in R4, then store if R3 is nonzero in R3, then
       bitwise or the result *)
     @ [Label l; Sne(R4, R4, R0); Sne(R3, R3, R0); Mips.Or(R3, R3, Reg(R4))]
