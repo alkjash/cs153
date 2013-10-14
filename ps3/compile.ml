@@ -16,16 +16,20 @@ let new_label() = "L" ^ (string_of_int (new_int()))
 
 (* varmap: immutable association list of vars and offsets
 	For scopes we implement the following addition: in varmap we add
-	("BRACE", 0) to indicate that a new lbrace has been hit and a scope
-	change is involved. This is for the sake of knowing which variables to
-	pop out of the varmap when we hit an end brace and scope change. *)
+	in a new variable each time we have a "let v = exp in stmt" type statement,
+	and then at the end of that let we would pop the variable v back off the head of
+	the varmap *)
 type varmap = (Ast.var * int) list
 
 let empty_varmap = [] 
 
-let insert_var (vm : varmap) (v : Ast.var) (offset : int) : varmap =
+let vm_insert (vm : varmap) (v : Ast.var) (offset : int) : varmap =
 	("MOO" ^ v, offset) :: vm 
 
+let vm_delete (vm : varmap) : varmap =
+	List.tl vm
+
+(*
 let vm_newscope (vm : varmap) : varmap =
 	("BRACE", 0) :: vm
 
@@ -34,54 +38,189 @@ let rec vm_endscope (vm : varmap) : varmap =
 	  ("BRACE", 0) :: t -> t
 	| _ :: t -> vm_endscope t
 	| [] -> []
+*)
 
 (* Returns -1 if not found, otherwise positive offset *)
-let rec lookup_var (vm : varmap) (v : Ast.var) : int =
+let rec vm_lookup (vm : varmap) (v : Ast.var) : int =
 	let var = "MOO" ^ v in
 	match vm with
 	  [] -> -1
-	| h::t -> (fun (v2, o) -> if v2 = var then o else
+	| h :: t -> (fun (v2, o) -> if v2 = var then o else
 		lookup_var t v) h
+
+(* Creates a new temporary variable and cons it to the head of varmap *)
+let new_temp (vm : varmap) : varmap = 
+	let v = "T" ^ (string_of_int (new_int())) in
+	v :: vm
 
 type env = {varmap : varmap; epilogue : Mips.label}
 
-(************ Helper functions *****************************************)
-(* make_env(): create environment for a function, passing through the code once:
-   Association list (var * int) which keeps track of where temporary variables are
-   with respect to frame pointer. int is the number of words from the frame pointer
-   where the base of var starts. *)
-let rec args_list (args : var list) : varmap =
-  | h::t -> (h,R29-R30) @ make_env t
-  | _ -> []
+(************ Helpers **************************************************)
 
-let make_env (f : Ast.func) : varmap =
-	args_list f.args
-
-
-(* push and pop: wrappers for pushing and popping temps off of the stack *)
+(* push and pop: wrappers for pushing and popping vars on and off of the stack *)
 (* push writes assembly code down that pushes the value of register r onto the current
    sp and updating sp *)
 let push (r : Mips.reg) : Mips.inst list =
-	[Sw(r,R29,zero); Add(R29,R29,4)]
+	[Sw(r,R29,zero); Sub(R29,R29,4)]
 
 (* pop writes assembly code down that pops off the top of sp into register r and decrements
    sp *)
 let pop (r : Mips.reg) : Mips.inst list =
-	[La(r,R29,zero); Lw(r,r,zero); Sub(R29,R29,4)]
+	[Lw(r,R29,zero); Add(R29,R29,4)]
 
-(* Set up stack frame for new procedure; calls make_env to set up local variables first *)
-let rec push_args (args : varmap) : Mips.inst list =
-  match args with
-  | (name,_)::t -> [La(R2,name); Lw(R2,R2)] @ push(R2) @ (push_args t)
+(************ Statement-Level Compilation ******************************)
+(* Essentially the same as Fish statements except treat variables differently
+   and have to deal with internal scope changes and function calls
+   Every function now takes and returns an env to keep varmap updated, and know
+   where to return to (epilogue) in case of Return statement *)
+
+let zero = Word32.fromInt 0
+
+let rec compile_explist (lst : exp list) (en :env) : inst list =
+  match lst with
+    h::t -> (compile_exp h en) @ (push R3) @ (compile_explist t en)
   | _ -> []
 
-let frame_start (f : Ast.func) : Mips.inst list =
-	(push_args (make_env f)) @ push(R31) @ push(R30)
+(* The only guarantee we make of an expression is that R3 is stored with its value after it is 
+   finished evaluating. It may or may not clobber R4 in the process.
+   Compile_exp doesn't handle scope changes or Lets, so we don't have to worry about
+   passing back a modified varmap *)
+let rec compile_exp ((e , _) : Ast.exp) (en : env) : inst list =
+	let vm = en.varmap in
+    match e with
+      Int j -> [Li(R3, Word32.fromInt j)]
+
+    | Var x -> 
+	let offset = vm_lookup vm x in
+	[Add(R3, R30, Immed(Word32.fromInt (-offset))); Lw(R3, R3, zero)]
+
+    | Binop(e1, op, e2) -> 
+    (* Push value of e1 onto stack *)
+    (compile_exp e1 en) @ (push R3)
+    (* Pop e1 into R4, meanwhile return value of e2 is in R3 *)
+    @ (compile_exp e2 en) @ (pop R4)
+    @ (match op with
+    	  Plus -> [Add(R3, R4, Reg R3)]
+    	| Minus -> [Sub(R3, R4, R3)]
+    	| Times -> [Mul(R3, R4, R3)]
+    	| Div -> [Mips.Div(R3, R4, R3)]
+    	| Eq -> [Mips.Seq(R3, R4, R3)]
+    	| Neq -> [Sne(R3, R4, R3)]
+    	| Lt -> [Slt(R3, R4, R3)]
+    	| Lte -> [Sle(R3, R4, R3)]
+    	| Gt -> [Sgt(R3, R4, R3)]
+    	| Gte -> [Sge(R3, R4, R3)]
+    )
+
+    | Not(e) -> 
+	(compile_exp e en) @ [Mips.Seq(R3, R3, R0)] (* Set R3 to 1 if zero, zero otherwise *)
+    | And(e1, e2) -> 
+    let l = new_label() in
+    (* If e1 = 0 jump directly to end, otherwise push it to stack *)
+    (compile_exp e1 en) @ [Beq(R3, R0, l)] @ (push R3)
+    (* Recover e1 from stack into R4, meanwhile return value of e2 is in R3 *)
+    @ (compile_exp e2 en) @ (pop R4)
+    (* Store if R4 is nonzero in R4, then store if R3 is nonzero in R3, then
+      bitwise and the result *)
+    @ [Label l; Sne(R4, R4, R0); Sne(R3, R3, R0); Mips.And(R3, R3, Reg(R4))]
+
+    | Or(e1, e2) -> 
+    let l = new_label() in
+    (* If e1 != 0 jump directly to end, otherwise push it to stack *)
+    (compile_exp e1 en) @ [Bne(R3, R0, l)] @ (push R3) 
+    (* Recover e1 from stack into R4, meanwhile return value of e2 is in R3 *)
+    @ (compile_exp e2 en) @ (pop R4)
+    (* Store if R4 is nonzero in R4, then store if R3 is nonzero in R3, then
+      bitwise or the result *)
+    @ [Label l; Sne(R4, R4, R0); Sne(R3, R3, R0); Mips.Or(R3, R3, Reg(R4))]
+
+    | Assign(x, e) -> 
+	let offset = vm_lookup vm x in
+	(compile_exp e en) @ [Add(R4, R30, Immed(Word32.fromInt (-offset))); Sw(R3, R4, zero)] 
+
+	| Call (f, arglist) ->
+  (compile_explist arglist en) @ [Jal(f)]
+  
+
+
+let rec compile_stmt ((s,_):Ast.stmt) (en : env) : (inst list * env) = 
+    match s with
+    | Exp(e) -> 
+		(compile_exp e en, en)
+    | Seq(s1,s2) -> 
+		let (ilist1, en) = compile_stmt s1 en in
+		let (ilist2, en) = compile_stmt s2 en in
+		((ilist1 @ ilist2), en)
+    | If(e,s1,s2) ->
+        let else_1 = new_label() in
+        let end_l = new_label() in
+		let ilist1 = compile_exp e en in
+		let (ilist2, en) = compile_stmt s1 en in
+		let (ilist3, en) = compile_stmt s2 en in
+		((ilist1 @ [Beq(R3, R0, else_1)] @
+        ilist2 @ [J end_l; Label else_1] @
+        ilist3 @ [Label(end_l)]), en)
+    | While(e,s) ->
+        let test_l = new_label() in
+        let top_l = new_label() in
+		let (ilist, en) = compile_stmt s en in
+        (([J test_l; Label top_l] @
+        ilist @ [Label test_l] @
+        (compile_exp e en) @
+        [Bne(R3,R0,top_l)]), en)
+    (* Rewrite For as a While loop *)
+    | For(e1,e2,e3,s) ->
+        compile_stmt (Seq((Exp e1, 0),(While(e2,(Seq(s,(Exp e3,0)),0)), 0)), 0) en
+	| Let(v, e, s) ->
+		raise IMPLEMENT_ME
+    (* Store the result of R3 into R2 for return, then jump to epilogue *)
+    | Return(e) -> (((compile_exp e en) @ [Mips.Add(R2, R3, Reg(R0)); Jr(epilogue)]), en) 
+
+
+
+(************ Procedure-Level Compilation ******************************)
+(* Stack Frame setup for prologue:
+	--- Frame pointer ---
+	arg0
+	arg1
+	...
+	argn
+	Caller frame pointer
+	Return address
+	--- Stack pointer ---
+
+	If n < 4 then there are at least 4 anyways. The first four arg spaces are left empty
+	and it's up to the callee to store them there, which we always do for consistency.
+*)
+
+(* make_env(): create environment for a function, passing through the code once:
+   Association list (var * int) which keeps track of where temporary variables are
+   with respect to frame pointer. int is the number of words from the frame pointer
+   where the base of var starts. *)
+let rec args_list (args : var list) : env =
+  | h::t -> (h,R29-R30) @ make_env t
+  | _ -> []
+
+let rec make_env (fsig : Ast.funcsig) : env =
+	args_list fsig.args
+
+(* Set up stack frame for new procedure;  *)
+let frame_start (fsig : Ast.funcsig) : Mips.inst list =
+	let nargs = List.length fsig.args in
+	(push R30) @ 
+
+(* Clean up before return *)
+let frame_end (fsig : Ast.funcsig) : Mips.inst list =
+	let nargs = List.length fsig.args in
+	(push R30) @ 
 
 (* Actually compile a function: first calls frame_start to set up stack frame, then compiles
    body of procedure, then makes epilogue for return *)
 let compile_func (f : Ast.func) : Mips.inst list =
-	raise IMPLEMENT_ME
+	let Fn(fsig) = f in
+	let env = make_env fsig in
+	let head = Label ("FUNC" ^ fsig.name) :: (frame_start fsig) in 
+	
 
 (* TODO: More subfunctions needed: frame_end, frame_save *)
 
@@ -224,7 +363,7 @@ let compile (p : Ast.program) : result =
 	match p with
 	  [] -> []
 	| h::t -> (compile_func h) @ (compile_flist t) in
-	{ code = (Mips.Jal("main") :: (compile_flist p)); data = [] }
+	{ code = (Jal("main") :: (compile_flist p)); data = [] }
 
 let result2string (res : result) : string = 
     let code = res.code in
