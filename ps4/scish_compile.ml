@@ -36,7 +36,8 @@ let rec compile_func (e : Scish_ast.exp) (name : Cish_ast.var)
 		(match arg with
 		  None -> []
 		| Some v -> [v]); body = body; pos = 0}) in
-	f :: flist
+	(* Put f at the end so that all functions it depends on are declared first *)
+	List.rev (f :: flist)
 
 (* compile_exp takes a Scish expression and compiles it into a Cish program
    Explicitly, it calls compile_func to compile e into the main procedure
