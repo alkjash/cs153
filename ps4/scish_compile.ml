@@ -26,12 +26,13 @@ lookup(env,n) {
   return ( *(env + 0)) ; /* return the head of the env */
 } *)
 let lookup() =
-	let inner = (Seq((Exp (Assign((Cish_ast.Var "env", 0), 
-		(Load (Binop((Cish_ast.Var "env", 0), Plus, (Cish_ast.Int 4, 0)), 0), 0)), 0), 0)
-		(Exp (Assign((Cish_ast.Var "n", 0),
+	let inner = (Seq((Exp (Assign("env", 
+		(Load (Binop((Cish_ast.Var "env", 0), Plus, (Cish_ast.Int 4, 0)), 0), 0)), 0), 0), 
+		(Exp (Assign("n",
 		(Binop((Cish_ast.Var "n", 0), Minus, (Cish_ast.Int 1, 0)), 0)), 0), 0)), 0) in
-	let loop = (While((Binop(Cish_ast.Var "n", Neq, Cish_ast.Int 0), 0), inner), 0) in
-	let body = (Seq(loop, (Return (Exp (Load (Cish_ast.Var "env", 0), 0), 0), 0)), 0) in
+	let loop = (While((Binop((Cish_ast.Var "n", 0), Neq, (Cish_ast.Int 0, 0)), 
+		0), inner), 0) in
+	let body = (Seq(loop, (Return ((Load (Cish_ast.Var "env", 0)), 0), 0)), 0) in
 	let fsig = {name = "FLOOKUP"; args = ["env"; "n"]; body = body; pos = 0} in
 	Fn fsig
 
@@ -50,7 +51,7 @@ let rec compile_func (e : Scish_ast.exp) (name : Cish_ast.var)
 	| Scish_ast.Var(v) -> raise TODO
 	| PrimApp(op, el) -> raise TODO
 	| Lambda(v, e) -> raise TODO
-	| App(e, e) -> raise TODO
+	| App(e1, e2) -> raise TODO
 	| Scish_ast.If(e1, e2, e3) -> raise TODO in
 
 	let f = Fn({name = name; args = 
