@@ -45,29 +45,40 @@ let lookup() =
 (* The list of helper functions is constructed as side effects of compiling the main function *)
 let flist = ref []
 
-(* Compiles an "apply" expression, writing code to evaluate an expression where a given variable is
-   substituted in by the apply *)
-let compile_aexp (e : Scish_ast.exp) (v : Scish_ast.var) : Cish_ast.stmt =
-
-let rec compile_func (e : Scish_ast.exp) (name : Cish_ast.var) 
-	(arg : Scish_ast.var option) : Cish_ast.func =
-	(* Compile the body of f, simultaneously calling compile_func each time
-	   we use Lambda to create a new unnamed function, and adding it to flist *)
-	let body = match e with
-	  Scish_ast.Int(i) -> raise TODO
-	| Scish_ast.Var(v) -> raise TODO
-	| PrimApp(op, el) -> raise TODO
-	| Lambda(v, e) -> raise TODO
+(* Compiles Int(i), PrimApp(p, el), If(e1, e2, e3), App(e1, e2) *)
+let rec compile_aexp (e : Scish_ast.exp) : Cish_ast.stmt = 
+	match e with
+	  Scish_ast.Int(i) -> raise TODO 
+	| PrimApp(p, el) -> match p with
+		  Plus ->
+		| Minus ->
+		| Times ->
+		| Div ->
+		| Cons ->
+		| Fst ->
+		| Snd ->
+		| Eq ->
+		| Lt ->
+	| Scish_ast.If(e1, e2, e3) -> raise TODO 
 	| App(e1, e2) -> 
 		(* First compile e1, which has to be a lambda function, and add it into the flist *)
 		let newf = compile_func e1 (new_func()) (Some v) in
 		let _ = (flist := newf :: (flist)) in
 		(* Next write code for calling e1, given that we have the function newf which takes an
 		   environment linked list *)
-		
+		let Lambda(v, e3) = e1 in
+		compile_applyexp e2 v
 
-	| Scish_ast.If(e1, e2, e3) -> raise TODO in
+(* Compiles an "apply" expression, writing code to evaluate an expression where a given variable is
+   substituted in by the apply *)
+and compile_applyexp (e : Scish_ast.exp) (v : Scish_ast.var) : Cish_ast.stmt =
+	raise TODO
 
+and compile_func (e : Scish_ast.exp) (name : Cish_ast.var) 
+	(arg : Scish_ast.var option) : Cish_ast.func =
+	(* First define a variable "result" which stores all the 
+	   temporary calculation values at each step, then compile the expression e into a stmt *)
+	let body = (Let "result" (Int 0, 0) (compile_aexp e), 0) in
 	let f = Fn({name = name; args = 
 		(match arg with
 		  None -> []
