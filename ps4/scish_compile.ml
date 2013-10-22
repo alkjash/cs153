@@ -45,12 +45,13 @@ let lookup() =
 (* The list of helper functions is constructed as side effects of compiling the main function *)
 let flist = ref []
 
-(* Compiles Int(i), PrimApp(p, el), If(e1, e2, e3), App(e1, e2) *)
+(* Compiles Int(i), PrimApp(p, el), If(e1, e2, e3), App(e1, e2), Lambda(v, e); 
+	calls compile_applyexp and compile_func to compile the last *)
 let rec compile_aexp (e : Scish_ast.exp) : Cish_ast.stmt = 
 	match e with
 	  Scish_ast.Int(i) -> raise TODO 
 	| PrimApp(p, el) -> match p with
-		  Plus ->
+		  Plus -> 
 		| Minus ->
 		| Times ->
 		| Div ->
@@ -68,6 +69,10 @@ let rec compile_aexp (e : Scish_ast.exp) : Cish_ast.stmt =
 		   environment linked list *)
 		let Lambda(v, e3) = e1 in
 		compile_applyexp e2 v
+	| Lambda(v, e) ->
+		(* Compile the function and then compute and return a closure *)
+		let newf = compile_func e1 (new_func()) (Some v) in
+		let _ = (flist := newf :: (!flist)) in
 
 (* Compiles an "apply" expression, writing code to evaluate an expression where a given variable is
    substituted in by the apply *)
