@@ -126,9 +126,13 @@ let rec compile_aexp (e : Scish_ast.exp) : Cish_ast.stmt =
 		| _ -> raise FatalError)
 	| Lambda(v, e1) ->
 		(* Compile the function and then compute and return a closure (a pair func, env) *)
-		let newf = compile_func e1 (new_func()) (Some "env") in
+		let fname = new_func() in
+		let newf = compile_func e1 fname (Some "env") in
 		let _ = (flist := newf :: (!flist)) in
-		raise TODO
+		(* Set result = (fname, env), where env is currently just 0 *)
+		let temp = new_var() in
+		
+		
 	| _ -> raise FatalError
 
 and compile_func (e : Scish_ast.exp) (name : Cish_ast.var) 
