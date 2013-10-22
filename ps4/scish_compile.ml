@@ -66,7 +66,7 @@ let make_pair (v1 : Cish_ast.var) (v2 : Cish_ast.var) : Cish_ast.stmt =
 			(Cish_ast.Var t1, 0)), 0), 0)]
 
 (* Compiles Int(i), PrimApp(p, el), If(e1, e2, e3), App(e1, e2), Lambda(v, e); 
-	calls compile_applyexp and compile_func to compile the last *)
+	calls compile_func to compile the last *)
 let rec compile_aexp (e : Scish_ast.exp) : Cish_ast.stmt = 
 	match e with
 	  Scish_ast.Int(i) -> raise TODO 
@@ -114,24 +114,22 @@ let rec compile_aexp (e : Scish_ast.exp) : Cish_ast.stmt =
 	| Scish_ast.If(e1, e2, e3) -> raise TODO 
 	| App(e1, e2) -> 
 		((* First compile e1, which has to be a lambda function, and add it into the flist *)
-		let newf = compile_func e1 (new_func()) (Some "env") in
+		let fname = new_func() in
+		let newf = compile_func e1 fname (Some "env") in
 		let _ = (flist := newf :: (!flist)) in
 		(* Next write code for calling e1, given that we have the function newf which takes an
 		   environment linked list *)
+		let temp = new_var() in
+		let call = make_pair fname temp in
 		match e1 with
-		  Lambda (v, e3) -> compile_applyexp e2 v
+		  Lambda (v, e3) -> make_Seq [call; compile_aexp e2]
 		| _ -> raise FatalError)
 	| Lambda(v, e1) ->
-		(* Compile the function and then compute and return a closure *)
+		(* Compile the function and then compute and return a closure (a pair func, env) *)
 		let newf = compile_func e1 (new_func()) (Some "env") in
 		let _ = (flist := newf :: (!flist)) in
 		raise TODO
 	| _ -> raise FatalError
-
-(* Compiles an "apply" expression, writing code to evaluate an expression where a given variable is
-   substituted in by the apply *)
-and compile_applyexp (e : Scish_ast.exp) (v : Scish_ast.var) : Cish_ast.stmt =
-	raise TODO
 
 and compile_func (e : Scish_ast.exp) (name : Cish_ast.var) 
 	(arg : Scish_ast.var option) : Cish_ast.func =
