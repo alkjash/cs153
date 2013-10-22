@@ -12,6 +12,7 @@ exception TODO
 (* Generate fresh labels *)
 let label_counter = ref 0
 let new_int() = (label_counter := (!label_counter) + 1; !label_counter)
+let new_var() = "T" ^ (string_of_int (new_int()))
 let new_func() = "F" ^ (string_of_int (new_int()))
 
 (********************** Environment *************************)
@@ -40,10 +41,16 @@ let lookup() =
 (* Compiles an expression e into a function of name f along with a set of functions
    that f depends on (via Lambda), which are returned as a list of functions headed
    by f *)
+
+(* The list of helper functions is constructed as side effects of compiling the main function *)
+let flist = ref []
+
+(* Compiles an "apply" expression, writing code to evaluate an expression where a given variable is
+   substituted in by the apply *)
+let compile_aexp (e : Scish_ast.exp) (v : Scish_ast.var) : Cish_ast.stmt =
+
 let rec compile_func (e : Scish_ast.exp) (name : Cish_ast.var) 
-	(arg : Scish_ast.var option) : Cish_ast.func list =
-	let flist = [] in (* List of Lambda functions constructed along the way *)
-	
+	(arg : Scish_ast.var option) : Cish_ast.func =
 	(* Compile the body of f, simultaneously calling compile_func each time
 	   we use Lambda to create a new unnamed function, and adding it to flist *)
 	let body = match e with
@@ -51,14 +58,20 @@ let rec compile_func (e : Scish_ast.exp) (name : Cish_ast.var)
 	| Scish_ast.Var(v) -> raise TODO
 	| PrimApp(op, el) -> raise TODO
 	| Lambda(v, e) -> raise TODO
-	| App(e1, e2) -> raise TODO
+	| App(e1, e2) -> 
+		(* First compile e1, which has to be a lambda function, and add it into the flist *)
+		let newf = compile_func e1 (new_func()) (Some v) in
+		let _ = (flist := newf :: (flist)) in
+		(* Next write code for calling e1, given that we have the function newf which takes an
+		   environment linked list *)
+		
+
 	| Scish_ast.If(e1, e2, e3) -> raise TODO in
 
 	let f = Fn({name = name; args = 
 		(match arg with
 		  None -> []
-		| Some v -> [v]); body = body; pos = 0}) in
-	f :: flist
+		| Some v -> [v]); body = body; pos = 0})
 
 (* compile_exp takes a Scish expression and compiles it into a Cish program
    Explicitly, it calls compile_func to compile e into the main procedure
@@ -66,4 +79,4 @@ let rec compile_func (e : Scish_ast.exp) (name : Cish_ast.var)
 let compile_exp (e:Scish_ast.exp) : Cish_ast.program =
 	(* Reverse the order of the functions so that functions are declared before
 	   functions depending on them *)
-	List.rev (compile_func e "main" None)
+	lookup() :: List.rev ((compile_func e "main" None) :: (!flist))
