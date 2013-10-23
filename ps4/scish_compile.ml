@@ -69,7 +69,7 @@ let make_pair (v1 : Cish_ast.var) (v2 : Cish_ast.var) : Cish_ast.stmt =
 	calls compile_func to compile the last *)
 let rec compile_aexp (e : Scish_ast.exp) (args : Scish_ast.var list) : Cish_ast.stmt = 
 	match e with
-	  Scish_ast.Int(i) -> raise TODO 
+	  Scish_ast.Int(i) -> Cish_ast.Int(i)
 	| PrimApp(p, el) -> (match p with
 		(* Pairs stored as pair of pointers to objects: *t is the first element, *(t+4) is second *)
 		  Fst -> 
