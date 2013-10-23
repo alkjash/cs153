@@ -128,7 +128,7 @@ let rec compile_aexp (e : Scish_ast.exp) : Cish_ast.stmt =
 		(* Compile the function and then compute and return a closure (a pair func, env) *)
 		let newf = compile_func e1 (new_func()) (Some "env") in
 		let _ = (flist := newf :: (!flist)) in
-		raise TODO
+		make_pair (Cish_ast.Var "env") newf
 	| _ -> raise FatalError
 
 and compile_func (e : Scish_ast.exp) (name : Cish_ast.var) 
