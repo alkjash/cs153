@@ -75,7 +75,7 @@ let rec compile_aexp (e : Scish_ast.exp) (args : Scish_ast.var list) : Cish_ast.
 		  Fst -> 
 			(* compile el into code which puts its value in result, 
 				then store the first element of that in result *)
-			make_Seq [compile_aexp (List.hd el) var_l;
+			make_Seq [compile_aexp (List.hd el) args;
 				(Exp(Assign("result", (Load (Cish_ast.Var "result", 0), 0)), 0), 0)]
 		| Snd ->
 			(* compile el into code which puts its value in result, 
@@ -111,11 +111,11 @@ let rec compile_aexp (e : Scish_ast.exp) (args : Scish_ast.var list) : Cish_ast.
 				make_Seq [compile_aexp e2; compute]), 0) in
 			make_Seq [compile_aexp e1; store_temp])
 			
-	| Scish_ast.If(e1, e2, e3) -> raise TODO 
+	| Scish_ast.If(e1, e2, e3) -> Cish_ast.If(e1,compile_aexp e2, compile_aexp e3)
 	| App(e1, e2) -> 
 		((* First compile e1, which has to be a lambda function, and add it into the flist *)
 		let fname = new_func() in
-		let newf = compile_func e1 fname (Some "env") in
+		let newf = compile_func e1 fname ["env"] in
 		let _ = (flist := newf :: (!flist)) in
 		(* Next write code for calling e1, given that we have the function newf which takes an
 		   environment linked list *)
@@ -127,12 +127,13 @@ let rec compile_aexp (e : Scish_ast.exp) (args : Scish_ast.var list) : Cish_ast.
 	| Lambda(v, e1) ->
 		(* Compile the function and then compute and return a closure (a pair func, env) *)
 		let fname = new_func() in
+		if args == [] then fname = "main" in
 		let newf = compile_func e1 fname v::args in
 		let _ = (flist := newf :: (!flist)) in
 		(* Set result = (fname, env), where env is currently just 0 *)
 		(* let temp = new_var() in
 		let store_temp = (Let (temp, ) *)
-		make_Seq [newf; make_pair fname "env"]
+		make_Seq [(make_pair v "env"); (make_pair fname "result")]
 	| _ -> raise FatalError
 
 and compile_func (e : Scish_ast.exp) (name : Cish_ast.var) 
