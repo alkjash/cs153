@@ -131,8 +131,7 @@ let rec compile_aexp (e : Scish_ast.exp) : Cish_ast.stmt =
 		let _ = (flist := newf :: (!flist)) in
 		(* Set result = (fname, env), where env is currently just 0 *)
 		let temp = new_var() in
-		
-		
+		(Let(temp, (Int 0, 0), make_pair fname temp), 0)
 	| _ -> raise FatalError
 
 and compile_func (e : Scish_ast.exp) (name : Cish_ast.var) 
