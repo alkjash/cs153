@@ -129,7 +129,7 @@ let rec compile_aexp (e : Scish_ast.exp) (args : Scish_ast.var list) : Cish_ast.
 		(* Set result = (fname, env), where env is currently just 0 *)
 		(* let temp = new_var() in
 		let store_temp = (Let (temp, ) *)
-		make_Seq [(make_pair v "env"); (make_pair fname "result")]
+		make_pair fname "env"
 	| Scish_ast.Var v ->
 		(Cish_ast.Exp(Assign ("result", (Cish_ast.Var ("MOO" ^ v), 0)), 0), 0)
 
