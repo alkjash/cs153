@@ -67,7 +67,7 @@ let make_pair (v1 : Cish_ast.var) (v2 : Cish_ast.var) : Cish_ast.stmt =
 
 (* Compiles Int(i), PrimApp(p, el), If(e1, e2, e3), App(e1, e2), Lambda(v, e); 
 	calls compile_func to compile the last *)
-let rec compile_aexp (e : Scish_ast.exp) : Cish_ast.stmt = 
+let rec compile_aexp (e : Scish_ast.exp) (args : Scish_ast.var list) : Cish_ast.stmt = 
 	match e with
 	  Scish_ast.Int(i) -> raise TODO 
 	| PrimApp(p, el) -> (match p with
@@ -75,7 +75,7 @@ let rec compile_aexp (e : Scish_ast.exp) : Cish_ast.stmt =
 		  Fst -> 
 			(* compile el into code which puts its value in result, 
 				then store the first element of that in result *)
-			make_Seq [compile_aexp (List.hd el);
+			make_Seq [compile_aexp (List.hd el) var_l;
 				(Exp(Assign("result", (Load (Cish_ast.Var "result", 0), 0)), 0), 0)]
 		| Snd ->
 			(* compile el into code which puts its value in result, 
@@ -127,22 +127,20 @@ let rec compile_aexp (e : Scish_ast.exp) : Cish_ast.stmt =
 	| Lambda(v, e1) ->
 		(* Compile the function and then compute and return a closure (a pair func, env) *)
 		let fname = new_func() in
-		let newf = compile_func e1 fname (Some "env") in
+		let newf = compile_func e1 fname v::args in
 		let _ = (flist := newf :: (!flist)) in
 		(* Set result = (fname, env), where env is currently just 0 *)
-		let temp = new_var() in
-		(Let(temp, (Int 0, 0), make_pair fname temp), 0)
+		(* let temp = new_var() in
+		let store_temp = (Let (temp, ) *)
+		make_Seq [newf; make_pair fname "env"]
 	| _ -> raise FatalError
 
 and compile_func (e : Scish_ast.exp) (name : Cish_ast.var) 
-	(arg : Scish_ast.var option) : Cish_ast.func =
+	(args : Scish_ast.var list) : Cish_ast.func =
 	(* First define a variable "result" which stores all the 
 	   temporary calculation values at each step, then compile the expression e into a stmt *)
-	let body = (Let ("result", (Int 0, 0), (compile_aexp e)), 0) in
-	Fn({name = name; args = 
-		(match arg with
-		  None -> []
-		| Some v -> [v]); body = body; pos = 0})
+	let body = (Let ("result", (Int 0, 0), (compile_aexp e args)), 0) in
+	Fn({name = name; args = args; body = body; pos = 0})
 
 (* compile_exp takes a Scish expression and compiles it into a Cish program
    Explicitly, it calls compile_func to compile e into the main procedure
