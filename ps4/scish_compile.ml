@@ -69,7 +69,7 @@ let make_pair (v1 : Cish_ast.var) (v2 : Cish_ast.var) : Cish_ast.stmt =
 	calls compile_func to compile the last *)
 let rec compile_aexp (e : Scish_ast.exp) (args : Scish_ast.var list) : Cish_ast.stmt = 
 	match e with
-	  Scish_ast.Int(i) -> Cish_ast.Int(i)
+	  Scish_ast.Int(i) -> (Cish_ast.Exp (Cish_ast.Int(i), 0), 0)
 	| PrimApp(p, el) -> (match p with
 		(* Pairs stored as pair of pointers to objects: *t is the first element, *(t+4) is second *)
 		  Fst -> 
@@ -80,7 +80,7 @@ let rec compile_aexp (e : Scish_ast.exp) (args : Scish_ast.var list) : Cish_ast.
 		| Snd ->
 			(* compile el into code which puts its value in result, 
 				then store the second element of that in result *)
-			make_Seq [compile_aexp (List.hd el); 
+			make_Seq [compile_aexp (List.hd el) args; 
 				(Exp(Assign("result", (Load
 				(Binop((Cish_ast.Var "result", 0), Plus, (Int(4), 0)), 0), 0)), 0), 0)]
 		| _ -> if List.length el <> 2 then raise FatalError else
@@ -108,8 +108,8 @@ let rec compile_aexp (e : Scish_ast.exp) (args : Scish_ast.var list) : Cish_ast.
 			(* Compile e1, load its result into a temp, then compile e2; all this before applying
 			   the primop *)
 			let store_temp = (Let (temp, (Cish_ast.Var "result", 0), 
-				make_Seq [compile_aexp e2; compute]), 0) in
-			make_Seq [compile_aexp e1; store_temp])
+				make_Seq [compile_aexp e2 args; compute]), 0) in
+			make_Seq [compile_aexp e1 args; store_temp])
 			
 	| Scish_ast.If(e1, e2, e3) -> 
 		make_Seq [compile_aexp e1 args; 
@@ -124,13 +124,13 @@ let rec compile_aexp (e : Scish_ast.exp) (args : Scish_ast.var list) : Cish_ast.
 		let temp = new_var() in
 		let call = make_pair fname temp in
 		match e1 with
-		  Lambda (v, e3) -> make_Seq [call; compile_aexp e2]
+		  Lambda (v, e3) -> make_Seq [call; compile_aexp e2 (v::args)]
 		| _ -> raise FatalError)
 	| Lambda(v, e1) ->
 		(* Compile the function and then compute and return a closure (a pair func, env) *)
 		let fname = new_func() in
-		if args == [] then fname = "main" in
-		let newf = compile_func e1 fname v::args in
+		if args == [] then let fname = "main" in
+		let newf = compile_func e1 fname (v::args) in
 		let _ = (flist := newf :: (!flist)) in
 		(* Set result = (fname, env), where env is currently just 0 *)
 		(* let temp = new_var() in
@@ -146,9 +146,9 @@ and compile_func (e : Scish_ast.exp) (name : Cish_ast.var)
 	let rec lookup_args s n = match s with 
 		  [] -> compile_aexp e args
 		| h::t -> (Let (h, (Call ((Var "FLOOKUP", 0), [(Var "env", 0); (Int n, 0)]), 0), 
-					lookup_args t n+1), 0)
+					lookup_args t n+1), 0) in
 	let body = (Let ("result", (Int 0, 0), (lookup_args args 0)), 0) in
-	Fn({name = name; args = {if args = [] then [] else ["env"]}; body = body; pos = 0})
+	Fn({name = name; args = (if args = [] then [] else ["env"]); body = body; pos = 0})
 
 (* compile_exp takes a Scish expression and compiles it into a Cish program
    Explicitly, it calls compile_func to compile e into the main procedure
