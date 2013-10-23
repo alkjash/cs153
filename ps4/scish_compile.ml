@@ -69,7 +69,7 @@ let make_pair (v1 : Cish_ast.var) (v2 : Cish_ast.var) : Cish_ast.stmt =
 	calls compile_func to compile the last *)
 let rec compile_aexp (e : Scish_ast.exp) (args : Scish_ast.var list) : Cish_ast.stmt = 
 	match e with
-	  Scish_ast.Int(i) -> Cish_ast.Int(i)
+	  Scish_ast.Int(i) -> (Cish_ast.Exp (Cish_ast.Int(i), 0), 0)
 	| PrimApp(p, el) -> (match p with
 		(* Pairs stored as pair of pointers to objects: *t is the first element, *(t+4) is second *)
 		  Fst -> 
@@ -129,7 +129,7 @@ let rec compile_aexp (e : Scish_ast.exp) (args : Scish_ast.var list) : Cish_ast.
 	| Lambda(v, e1) ->
 		(* Compile the function and then compute and return a closure (a pair func, env) *)
 		let fname = new_func() in
-		if args == [] then fname = "main" in
+		if args == [] then let fname = "main" in
 		let newf = compile_func e1 fname v::args in
 		let _ = (flist := newf :: (!flist)) in
 		(* Set result = (fname, env), where env is currently just 0 *)
@@ -143,9 +143,9 @@ and compile_func (e : Scish_ast.exp) (name : Cish_ast.var)
 	(* First define a variable "result" which stores all the 
 	   temporary calculation values at each step, then compile the expression e into a stmt *)
 	(* Go through env and look up all the variables in args in order *)
-	let rec lookup_args s = match s with 
+	(* let rec lookup_args s = match s with  *)
 	let body = (Let ("result", (Int 0, 0), (compile_aexp e args)), 0) in
-	Fn({name = name; args = {if args = [] then [] else ["env"]}; body = body; pos = 0})
+	Fn({name = name; args = (if args = [] then [] else ["env"]); body = body; pos = 0})
 
 (* compile_exp takes a Scish expression and compiles it into a Cish program
    Explicitly, it calls compile_func to compile e into the main procedure
