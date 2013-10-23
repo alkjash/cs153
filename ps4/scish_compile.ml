@@ -143,8 +143,11 @@ and compile_func (e : Scish_ast.exp) (name : Cish_ast.var)
 	(* First define a variable "result" which stores all the 
 	   temporary calculation values at each step, then compile the expression e into a stmt *)
 	(* Go through env and look up all the variables in args in order *)
-	let rec lookup_args s = match s with 
-	let body = (Let ("result", (Int 0, 0), (compile_aexp e args)), 0) in
+	let rec lookup_args s n = match s with 
+		  [] -> compile_aexp e args
+		| h::t -> (Let (h, (Call ((Var "FLOOKUP", 0), [(Var "env", 0); (Int n, 0)]), 0), 
+					lookup_args t n+1), 0)
+	let body = (Let ("result", (Int 0, 0), (lookup_args args 0)), 0) in
 	Fn({name = name; args = {if args = [] then [] else ["env"]}; body = body; pos = 0})
 
 (* compile_exp takes a Scish expression and compiles it into a Cish program
