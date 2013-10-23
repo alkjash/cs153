@@ -142,7 +142,6 @@ let rec compile_aexp (e : Scish_ast.exp) (args : Scish_ast.var list) : Cish_ast.
 		let fname = new_func() in
 		let newf = compile_func e1 fname (v::args) in
 		let _ = (flist := newf :: (!flist)) in
-		let _ = print_int (List.length (!flist)) in
 		(* Set result = (fname, env), where env is currently just the env given by the caller *)
 		make_pair fname "env"
 	| Scish_ast.Var v ->
@@ -150,7 +149,6 @@ let rec compile_aexp (e : Scish_ast.exp) (args : Scish_ast.var list) : Cish_ast.
 
 and compile_func (e : Scish_ast.exp) (name : Cish_ast.var) 
 	(args : Scish_ast.var list) : Cish_ast.func =
-	let _ = print_string ("compiling function" ^ name) in
 	(* First define a variable "result" which stores all the 
 	   temporary calculation values at each step, then compile the expression e into a stmt *)
 	(* Go through env and look up all the variables in args in order *)
@@ -173,5 +171,6 @@ and compile_func (e : Scish_ast.exp) (name : Cish_ast.var)
 let compile_exp (e:Scish_ast.exp) : Cish_ast.program =
 	(* Reverse the order of the functions so that functions are declared before
 	   functions depending on them *)
-	lookup() :: List.rev ((compile_func e "main" []) :: (!flist))
+	let main = compile_func e "main" [] in
+	lookup() :: (List.rev (main :: (!flist)))
 	
