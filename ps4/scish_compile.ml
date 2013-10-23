@@ -123,19 +123,23 @@ let rec compile_aexp (e : Scish_ast.exp) (args : Scish_ast.var list) : Cish_ast.
 		(* Compile the value of e2, stored in result and then transferred to t2 *)
 		let i2 = compile_aexp e2 args in
 
-		(* New temp for extracting function from closure *)
+		(* New temp for extracting function and environment from closure *)
 		let t3 = new_var() in
+		let t4 = new_var() in
 		
 		(* Function in t3, env in env *)
 		let call = (Exp(Assign("result", (Call ((Cish_ast.Var t3, 0), 
 			[(Cish_ast.Var "env", 0)]), 0)), 0), 0) in
-		let setup = (Let(t3, (Load(Cish_ast.Var t1, 0), 0), call), 0) in
 
-		(* Push the value of i2 onto the current env by making a pair *)
-		let make_env = make_Seq [make_pair t2 "env"; 
-			(Let ("env", (Cish_ast.Var "result", 0), setup), 0)] in
+		(* Push the value of i2 onto the current env in t4 by making a pair *)
+		let make_env = make_Seq [make_pair t2 t4; 
+			(Let ("env", (Cish_ast.Var "result", 0), call), 0)] in
+
+		(* Load the right values into t3 and t4 before call *)
+		let setup = (Let(t4, (Load((Binop((Cish_ast.Var t1, 0), Plus, (Cish_ast.Int 4, 0)), 0)), 0),
+			(Let(t3, (Load(Cish_ast.Var t1, 0), 0), make_env), 0)), 0) in
 		
-		let compile1 = make_Seq [i2; (Let (t2, (Cish_ast.Var "result", 0), make_env), 0)] in
+		let compile1 = make_Seq [i2; (Let (t2, (Cish_ast.Var "result", 0), setup), 0)] in
 		make_Seq [i1; (Let (t1, (Cish_ast.Var "result", 0), compile1), 0)])
 	| Lambda(v, e1) ->
 		(* Compile the function and then compute and return a closure (a pair func, env) *)
