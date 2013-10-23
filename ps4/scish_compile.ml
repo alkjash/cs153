@@ -90,17 +90,17 @@ let rec compile_aexp (e : Scish_ast.exp) (args : Scish_ast.var list) : Cish_ast.
 				value of e2 stored in result; apply p to them and store in result *)
 			let compute = match p with
 			  Scish_ast.Plus -> (Exp(Assign("result", 
-				(Binop((Cish_ast.Var "result", 0), Cish_ast.Plus, (Cish_ast.Var temp, 0)), 0)), 0), 0)
+				(Binop((Cish_ast.Var temp, 0), Cish_ast.Plus, (Cish_ast.Var "result", 0)), 0)), 0), 0)
 			| Scish_ast.Minus -> (Exp(Assign("result", 
-				(Binop((Cish_ast.Var "result", 0), Cish_ast.Minus, (Cish_ast.Var temp, 0)), 0)), 0), 0)
+				(Binop((Cish_ast.Var temp, 0), Cish_ast.Minus, (Cish_ast.Var "result", 0)), 0)), 0), 0)
 			| Scish_ast.Times -> (Exp(Assign("result", 
-				(Binop((Cish_ast.Var "result", 0), Cish_ast.Times, (Cish_ast.Var temp, 0)), 0)), 0), 0)
+				(Binop((Cish_ast.Var temp, 0), Cish_ast.Times, (Cish_ast.Var "result", 0)), 0)), 0), 0)
 			| Scish_ast.Div -> (Exp(Assign("result", 
-				(Binop((Cish_ast.Var "result", 0), Cish_ast.Div, (Cish_ast.Var temp, 0)), 0)), 0), 0)
+				(Binop((Cish_ast.Var temp, 0), Cish_ast.Div, (Cish_ast.Var "result", 0)), 0)), 0), 0)
 			| Scish_ast.Eq -> (Exp(Assign("result", 
-				(Binop((Cish_ast.Var "result", 0), Cish_ast.Eq, (Cish_ast.Var temp, 0)), 0)), 0), 0)
+				(Binop((Cish_ast.Var temp, 0), Cish_ast.Eq, (Cish_ast.Var "result", 0)), 0)), 0), 0)
 			| Scish_ast.Lt -> (Exp(Assign("result", 
-				(Binop((Cish_ast.Var "result", 0), Cish_ast.Lt, (Cish_ast.Var temp, 0)), 0)), 0), 0)
+				(Binop((Cish_ast.Var temp, 0), Cish_ast.Lt, (Cish_ast.Var "result", 0)), 0)), 0), 0)
 			| Cons -> make_pair temp "result" 
 			| _ -> raise FatalError in
  
