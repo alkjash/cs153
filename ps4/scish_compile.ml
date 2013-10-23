@@ -111,11 +111,13 @@ let rec compile_aexp (e : Scish_ast.exp) (args : Scish_ast.var list) : Cish_ast.
 				make_Seq [compile_aexp e2; compute]), 0) in
 			make_Seq [compile_aexp e1; store_temp])
 			
-	| Scish_ast.If(e1, e2, e3) -> Cish_ast.If(e1,compile_aexp e2, compile_aexp e3)
+	| Scish_ast.If(e1, e2, e3) -> 
+		make_Seq [compile_aexp e1 args; 
+		(Cish_ast.If((Cish_ast.Var "result", 0), compile_aexp e2 args, compile_aexp e3 args), 0)]
 	| App(e1, e2) -> 
 		((* First compile e1, which has to be a lambda function, and add it into the flist *)
 		let fname = new_func() in
-		let newf = compile_func e1 fname ["env"] in
+		let newf = compile_func e1 fname args in
 		let _ = (flist := newf :: (!flist)) in
 		(* Next write code for calling e1, given that we have the function newf which takes an
 		   environment linked list *)
@@ -140,8 +142,10 @@ and compile_func (e : Scish_ast.exp) (name : Cish_ast.var)
 	(args : Scish_ast.var list) : Cish_ast.func =
 	(* First define a variable "result" which stores all the 
 	   temporary calculation values at each step, then compile the expression e into a stmt *)
+	(* Go through env and look up all the variables in args in order *)
+	let rec lookup_args s = match s with 
 	let body = (Let ("result", (Int 0, 0), (compile_aexp e args)), 0) in
-	Fn({name = name; args = args; body = body; pos = 0})
+	Fn({name = name; args = {if args = [] then [] else ["env"]}; body = body; pos = 0})
 
 (* compile_exp takes a Scish expression and compiles it into a Cish program
    Explicitly, it calls compile_func to compile e into the main procedure
