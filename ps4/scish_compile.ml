@@ -129,13 +129,13 @@ let rec compile_aexp (e : Scish_ast.exp) (args : Scish_ast.var list) : Cish_ast.
 	| Lambda(v, e1) ->
 		(* Compile the function and then compute and return a closure (a pair func, env) *)
 		let fname = new_func() in
-		if args == [] then let fname = "main" in
 		let newf = compile_func e1 fname v::args in
 		let _ = (flist := newf :: (!flist)) in
 		(* Set result = (fname, env), where env is currently just 0 *)
 		(* let temp = new_var() in
 		let store_temp = (Let (temp, ) *)
-		make_Seq [(make_pair v "env"); (make_pair fname "result")]
+		(* make_Seq [(make_pair v "env"); (make_pair fname "result")] *)
+		make_pair fname "env"
 	| _ -> raise FatalError
 
 and compile_func (e : Scish_ast.exp) (name : Cish_ast.var) 
@@ -153,4 +153,4 @@ and compile_func (e : Scish_ast.exp) (name : Cish_ast.var)
 let compile_exp (e:Scish_ast.exp) : Cish_ast.program =
 	(* Reverse the order of the functions so that functions are declared before
 	   functions depending on them *)
-	lookup() :: List.rev ((compile_func e "main" None) :: (!flist))
+	lookup() :: List.rev ((compile_func e "main" []) :: (!flist))
