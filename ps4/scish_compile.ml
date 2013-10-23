@@ -111,7 +111,9 @@ let rec compile_aexp (e : Scish_ast.exp) (args : Scish_ast.var list) : Cish_ast.
 				make_Seq [compile_aexp e2; compute]), 0) in
 			make_Seq [compile_aexp e1; store_temp])
 			
-	| Scish_ast.If(e1, e2, e3) -> Cish_ast.If(e1, compile_aexp e2, compile_aexp e3)
+	| Scish_ast.If(e1, e2, e3) -> 
+		let (exp1, _) = compile_aexp e1 in
+		Cish_ast.If(Cish_ast.Exp exp1, compile_aexp e2, compile_aexp e3)
 	| App(e1, e2) -> 
 		((* First compile e1, which has to be a lambda function, and add it into the flist *)
 		let fname = new_func() in
