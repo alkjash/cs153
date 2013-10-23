@@ -69,7 +69,7 @@ let make_pair (v1 : Cish_ast.var) (v2 : Cish_ast.var) : Cish_ast.stmt =
 	calls compile_func to compile the last *)
 let rec compile_aexp (e : Scish_ast.exp) (args : Scish_ast.var list) : Cish_ast.stmt = 
 	match e with
-	  Scish_ast.Int(i) -> (Cish_ast.Exp (Cish_ast.Int(i), 0), 0)
+	  Scish_ast.Int(i) -> (Cish_ast.Exp (Assign("result", (Cish_ast.Int(i), 0)), 0), 0)
 	| PrimApp(p, el) -> (match p with
 		(* Pairs stored as pair of pointers to objects: *t is the first element, *(t+4) is second *)
 		  Fst -> 
@@ -115,28 +115,23 @@ let rec compile_aexp (e : Scish_ast.exp) (args : Scish_ast.var list) : Cish_ast.
 		make_Seq [compile_aexp e1 args; 
 		(Cish_ast.If((Cish_ast.Var "result", 0), compile_aexp e2 args, compile_aexp e3 args), 0)]
 	| App(e1, e2) -> 
-		((* First compile e1, which has to be a lambda function, and add it into the flist *)
-		let fname = new_func() in
-		let newf = compile_func e1 fname args in
-		let _ = (flist := newf :: (!flist)) in
-		(* Next write code for calling e1, given that we have the function newf which takes an
-		   environment linked list *)
-		let temp = new_var() in
-		let call = make_pair fname temp in
+		((* First compile e1, which should leave a function closure (func, env) in result *)
+		let i1 = compile_aexp e1 args in
+		
 		match e1 with
-		  Lambda (v, e3) -> make_Seq [call; compile_aexp e2 (v::args)]
+		  Lambda (v, e3) -> make_Seq [i1; compile_aexp e2 (v::args)]
 		| _ -> raise FatalError)
 	| Lambda(v, e1) ->
 		(* Compile the function and then compute and return a closure (a pair func, env) *)
 		let fname = new_func() in
-		if args == [] then let fname = "main" in
 		let newf = compile_func e1 fname (v::args) in
 		let _ = (flist := newf :: (!flist)) in
 		(* Set result = (fname, env), where env is currently just 0 *)
 		(* let temp = new_var() in
 		let store_temp = (Let (temp, ) *)
 		make_Seq [(make_pair v "env"); (make_pair fname "result")]
-	| _ -> raise FatalError
+	| Scish_ast.Var v ->
+		(Cish_ast.Exp(Assign ("result", (Cish_ast.Var ("MOO" ^ v), 0)), 0), 0)
 
 and compile_func (e : Scish_ast.exp) (name : Cish_ast.var) 
 	(args : Scish_ast.var list) : Cish_ast.func =
@@ -145,9 +140,11 @@ and compile_func (e : Scish_ast.exp) (name : Cish_ast.var)
 	(* Go through env and look up all the variables in args in order *)
 	let rec lookup_args s n = match s with 
 		  [] -> compile_aexp e args
-		| h::t -> (Let (h, (Call ((Var "FLOOKUP", 0), [(Var "env", 0); (Int n, 0)]), 0), 
-					lookup_args t n+1), 0) in
-	let body = (Let ("result", (Int 0, 0), (lookup_args args 0)), 0) in
+		| h::t -> (Let (("MOO" ^ h), (Call ((Var "FLOOKUP", 0), [(Var "env", 0); (Int n, 0)]), 0), 
+					lookup_args t (n+1)), 0) in
+	(* Write return statement *)
+	let ret = (Return (Var "result", 0), 0) in
+	let body = (Let ("result", (Int 0, 0), make_Seq [(lookup_args args 0); ret]), 0) in
 	Fn({name = name; args = (if args = [] then [] else ["env"]); body = body; pos = 0})
 
 (* compile_exp takes a Scish expression and compiles it into a Cish program
@@ -156,4 +153,4 @@ and compile_func (e : Scish_ast.exp) (name : Cish_ast.var)
 let compile_exp (e:Scish_ast.exp) : Cish_ast.program =
 	(* Reverse the order of the functions so that functions are declared before
 	   functions depending on them *)
-	lookup() :: List.rev ((compile_func e "main" None) :: (!flist))
+	lookup() :: List.rev ((compile_func e "main" []) :: (!flist))
