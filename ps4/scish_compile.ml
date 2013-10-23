@@ -126,9 +126,7 @@ let rec compile_aexp (e : Scish_ast.exp) (args : Scish_ast.var list) : Cish_ast.
 		let fname = new_func() in
 		let newf = compile_func e1 fname (v::args) in
 		let _ = (flist := newf :: (!flist)) in
-		(* Set result = (fname, env), where env is currently just 0 *)
-		(* let temp = new_var() in
-		let store_temp = (Let (temp, ) *)
+		(* Set result = (fname, env), where env is currently just the env given by the caller *)
 		make_pair fname "env"
 	| Scish_ast.Var v ->
 		(Cish_ast.Exp(Assign ("result", (Cish_ast.Var ("MOO" ^ v), 0)), 0), 0)
