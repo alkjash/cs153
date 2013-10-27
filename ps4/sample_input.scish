@@ -3,4 +3,4 @@
  * the file sample_output.cish.
  */
 
-(((lambda (x) (lambda (y) (+ x y))) 42) 3)
+((lambda (z) (((lambda (x) (lambda (y) (- z (/ x y)))) 43) 3)) 15)
