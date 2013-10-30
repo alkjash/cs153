@@ -11,9 +11,10 @@ type tipe =
 | Pair_t of tipe * tipe
 | List_t of tipe
 | Guess_t of tipe option ref
+(* if only one pointer, then set to None *)
 
 type tipe_scheme = Forall of (tvar list) * tipe
-
+(* 'tvar list' *)
 type prim = 
   Int of int
 | Bool of bool
