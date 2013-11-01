@@ -99,7 +99,7 @@ let rec occurs (g : ML.tipe option ref) (t : ML.tipe) : bool =
 	match t with
 	  ML.Guess_t r -> (match !r with
 						  Some t2 -> occurs g t2
-						| None -> g = r)
+						| None -> g == r)
 	| ML.Fn_t (x, y) -> (occurs g x) || (occurs g y)
 	| ML.Pair_t (x, y) -> (occurs g x) || (occurs g y)
 	| ML.List_t t1 -> occurs g t1
@@ -120,8 +120,10 @@ let rec unify (t1 : ML.tipe) (t2 : ML.tipe) : bool =
 	| (_, ML.Guess_t(_)) -> unify t2 t1
 	| (ML.Fn_t(a1, b1), ML.Fn_t(a2, b2)) 
 		-> (unify a1 a2) && (unify b1 b2)
-	| ML.Pair_t(a1, b1), ML.Pair_t(a2, b2) 
+	| (ML.Pair_t(a1, b1), ML.Pair_t(a2, b2))
 		-> (unify a1 a2) && (unify b1 b2)
+	| (ML.List_t a, ML.List_t b)
+		-> unify a b 
 	| _ -> false
 
 (* Checking primitive MLish expressions *)
@@ -136,12 +138,24 @@ let rec type_check_prim (en : env) (r : ML.rexp) : ML.tipe =
 			if List.length el = 0 then ML.Bool_t else type_error "Bool takes no arguments"
 		| ML.Unit -> 
 			if List.length el = 0 then ML.Unit_t else type_error "Unit takes no arguments"
-		| ML.Plus | ML.Minus | ML.Times | ML.Div | ML.Eq | ML.Lt -> 
+		| ML.Plus | ML.Minus | ML.Times | ML.Div ->
 			if (List.length el = 2) then
 				if (List.length (List.filter (fun x -> unify x ML.Int_t) el) = 2) then
 					ML.Int_t
 				else type_error "Arithmetic operations only take int"
 			else type_error "Arithmetic operations take two arguments"
+		| ML.Eq ->
+			if (List.length el = 2) then
+				if unify (List.hd el) (List.hd (List.tl el)) then
+					ML.Bool_t
+				else type_error "Equality operation received two different types"
+			else type_error "Equality operation takes two arguments"
+		| ML.Lt -> 
+			if (List.length el = 2) then
+				if (List.length (List.filter (fun x -> unify x ML.Int_t) el) = 2) then
+					ML.Bool_t
+				else type_error "Less than operation only take int"
+			else type_error "Less than operation takes two arguments"
 		| ML.Pair ->
 			if List.length el <> 2 then
 				type_error "Pair takes two arguments"
@@ -164,7 +178,7 @@ let rec type_check_prim (en : env) (r : ML.rexp) : ML.tipe =
 			else type_error "Nil list takes no arguments"
 		| ML.Cons ->
 			if List.length el <> 2 then
-				type_error "Pair takes two arguments"
+				type_error "Cons takes two arguments"
 			else let (t1, t2) = (List.hd el, List.hd (List.tl el)) in
 				if unify (ML.List_t t1) t2 then t2
 				else type_error "List head type doesn't match elements of tail"

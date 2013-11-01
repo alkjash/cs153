@@ -21,6 +21,7 @@ let run_prog prog = Scish_eval.run prog
 let _ = 
   let prog = parse_file() in
   let prog' = compile_prog prog in
+  let _ = print_string ((Scish_ast.exp2string prog') ^ "\n") in
   let ans = run_prog prog' in
   print_string ("answer = "^(Scish_eval.val2string ans)^"\n")
 

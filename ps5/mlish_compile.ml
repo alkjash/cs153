@@ -3,6 +3,12 @@ module S = Scish_ast
 
 exception TODO
 exception FatalError
+exception Unbound
+
+(* New variables S.var to remove shadowing concerns *)
+let vc = ref 0
+
+let new_var() = (vc := !vc + 1; "VAR" ^ (string_of_int !vc))
 
 (***************** Environment *******************************)
 type exp_env = (ML.var * S.exp) list
@@ -13,7 +19,7 @@ let insert (en : exp_env) (x : ML.var) (se : S.exp) : exp_env =
 
 let lookup (en : exp_env) (x : ML.var) : S.exp =
 	match (List.filter (fun y -> (fst y) = x) en) with
-	  [] -> raise FatalError
+	  [] -> raise Unbound
 	| h::t -> snd h
 
 (***************** Compilation *******************************)
@@ -39,7 +45,7 @@ let rec compile_primexp (en : exp_env) (e : ML.rexp) : S.exp =
 	| ML.Nil    -> S.Int 0 (* the empty list *)
 	| ML.Cons   -> S.PrimApp(S.Cons, el) (* create a list from two values *)
 	| ML.IsNil  -> (* determine whether a list is Nil *)
-		S.If (List.hd el, S.Int 1, S.Int 0)
+		S.If (List.hd el, S.Int 0, S.Int 1)
 	| ML.Hd     -> S.PrimApp(S.Fst, el) (* fetch the head of a list *)
 	| ML.Tl     -> S.PrimApp(S.Snd, el) (* fetch the tail of a list *)
 	)
@@ -52,7 +58,9 @@ and compile_rexp (en : exp_env) (e : ML.exp) : S.exp =
 		instance of x *)
 	  ML.Var x -> lookup en x
 	| ML.PrimApp _ -> compile_primexp en e
-	| ML.Fn (x, e) -> S.Lambda (x, (compile_rexp en e))
+	| ML.Fn (x, e) -> 
+		let v = new_var() in
+		S.Lambda (v, (compile_rexp (insert en x (S.Var v)) e))
 		(* if e1 is a function name 'f', are we sure that it becomes ML.Var f?*)
 	| ML.App (e1, e2) -> S.App ((compile_rexp en e1), (compile_rexp en e2))
 	| ML.If (e1, e2, e3) -> 
