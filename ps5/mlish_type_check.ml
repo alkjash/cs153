@@ -74,10 +74,18 @@ let rec type_check_prim (en : env) (r : ML.rexp) : ML.tipe =
 			if List.length el = 0 then ML.Unit_t else type_error()
 		| ML.Plus | ML.Minus | ML.Times | ML.Div | ML.Eq | ML.Lt -> 
 			raise TODO
-		| ML.Pair -> raise TODO
-		| ML.Fst -> raise TODO
-		| ML.Snd -> raise TODO
-		| ML.Nil -> raise TODO
+		| ML.Pair ->
+			match el with
+			  h::t -> ML.Pair_t(type_check_exp en h,type_check_exp en t)
+			| _ -> type_error ("Pair not valid")
+		| ML.Fst -> 
+			match el with
+			  h::_ -> type_check_exp en h
+			| _ -> type_error ("Pair not valid")
+		| ML.Snd ->
+			match el with
+			  _::t -> type_check_exp en t
+		| ML.Nil -> ML.Tvar_t("nil") (* ??? *)
 		| ML.Cons -> raise TODO
 		| ML.IsNil -> raise TODO
 		| ML.Hd | ML.Tl -> raise TODO)
@@ -97,11 +105,12 @@ and type_check_exp (en : env) (e : ML.exp) : ML.tipe =
 		ML.Fn_t (g, type_check_exp (extend en x Forall([], g)) e)
 	| ML.App (e1, e2) -> 
 		let (t1, t2, t) = (type_check_exp en e1, type_check_exp en e2, guess()) in
-		if unify t1 Fn_t(t2, t) then t else type_error()
+		if unify t1 Fn_t(t2, t) then t else 
+			type_error "Function expected type doesn't match received type" ^ 
 	| ML.If (e1, e2, e3) -> 
 		if unify (type_check_exp en e1) Bool_t then
 			let (t2, t3) = (type_check_exp en e2, type_check_exp en e3) in
-			if unify t2 t3 then t2 else type_error()
+			if unify t2 t3 then t2 else type_error "Incompatible types: if-else" 
 		else 
-			type_error()
+			type_error "Non-boolean value following if statement" 
 	| ML.Let (x, e1, e2) -> raise TODO
