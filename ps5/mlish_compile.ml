@@ -4,7 +4,21 @@ module S = Scish_ast
 exception TODO
 exception FatalError
 
-let rec compile_primexp (e : ML.rexp) : S.exp =
+(***************** Environment *******************************)
+type exp_env = (ML.var * S.exp) list
+
+(* Add a new var/fun to exp_env, possibly shadowing another *)
+let insert (en : exp_env) (x : ML.var) (se : S.exp) : exp_env =
+	(x, re) :: en
+
+let lookup (en : exp_env) (x : ML.var) : S.exp =
+	match (List.filter (fun y -> (fst y) = x) en) with
+	  [] -> type_error ("Unbound variable or function" ^ x)
+	| h::t -> snd h
+
+(***************** Compilation *******************************)
+
+let rec compile_primexp (en : exp_env) (e : ML.rexp) : S.exp =
 	match e with
 	  ML.PrimApp (p, el) ->
 	(match p with
@@ -28,13 +42,14 @@ let rec compile_primexp (e : ML.rexp) : S.exp =
 	)
 	| _ -> raise FatalError
 
-and compile_exp ((e,_):ML.exp) : S.exp =
+and compile_exp (en : exp_env) (e : ML.exp) : S.exp =
 	match e with
-	  ML.Var x -> S.Var x
-	| ML.PrimApp _ -> compile_primexp e
-	| ML.Fn (x, e) -> S.Lambda (x, (compile_exp e))
-	| ML.App (e1, e2) -> S.App ((compile_exp e1), (compile_exp e2))
+	  ML.Var x -> lookup en x
+	| ML.PrimApp _ -> let (re,_) = e in compile_primexp en re
+	| ML.Fn (x, e) -> S.Lambda (x, (compile_exp en e)
+		(* if e1 is a function name 'f', are we sure that it becomes ML.Var f?*)
+	| ML.App (e1, e2) -> S.App ((compile_exp en e1), (compile_exp en e2))
 	| ML.If (e1, e2, e3) -> 
-		S.If ((compile_exp e1), (compile_exp e2), (compile_exp e3))
+		S.If ((compile_exp e1), (compile_exp en e2), (compile_exp en e3))
 	| ML.Let (x, e1, e2) ->
-		S.sLet x (compile_exp e1) (compile_exp e2)
+		S.sLet x (compile_exp en e1) (compile_exp en e2)
