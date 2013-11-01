@@ -24,6 +24,7 @@ let lookup (en : env) (x : Mlish_ast.var) : Mlish_ast.tipe_scheme =
 let guess() = 
 	ML.Guess_t (ref None)
 
+(* Creating new tipe variables *)
 let tvar_count = ref 0
 
 let new_tvar() = (tvar_count := (!tvar_count) + 1; "TVAR" ^ (string_of_int !tvar_count))
@@ -92,6 +93,18 @@ let generalize (en : env) (t : ML.tipe) : ML.tipe_scheme =
 	let tc = subst_guesses gs_vs t in
 		ML.Forall(List.map snd gs_vs, tc)
 
+(* Occurs: Helper function to check that no guess is set to something containing it
+	already; otherwise problematic *)
+let rec occurs (g : ML.tipe option ref) (t : ML.tipe) : bool =
+	match t with
+	  ML.Guess_t r -> (match !r with
+						  Some t2 -> occurs g t2
+						| None -> g = r)
+	| ML.Fn_t (x, y) -> (occurs g x) || (occurs g y)
+	| ML.Pair_t (x, y) -> (occurs g x) || (occurs g y)
+	| ML.List_t t1 -> occurs g t1
+	| _ -> false
+
 (* Unify: check if t1 and t2 can be of the same tipe; improve guesses so that
    they are the same tipe at the end *)
 let rec unify (t1 : ML.tipe) (t2 : ML.tipe) : bool =
@@ -99,7 +112,11 @@ let rec unify (t1 : ML.tipe) (t2 : ML.tipe) : bool =
 	match (t1, t2) with
 	  (ML.Guess_t r, _) -> (match !r with
 							  Some t3 -> unify t3 t2
-							| None -> (r := Some t2; true))
+							| None -> 
+		((* Check for occurs r t2 before letting r := Some t2; otherwise might
+			self-reference *) 
+		if occurs r t2 then type_error "Self-referential type" else
+		(r := Some t2; true)))
 	| (_, ML.Guess_t(_)) -> unify t2 t1
 	| (ML.Fn_t(a1, b1), ML.Fn_t(a2, b2)) 
 		-> (unify a1 a2) && (unify b1 b2)
@@ -111,7 +128,7 @@ let rec unify (t1 : ML.tipe) (t2 : ML.tipe) : bool =
 let rec type_check_prim (en : env) (r : ML.rexp) : ML.tipe =
 	match r with
 	  ML.PrimApp(p, el) -> 
-		(let el = List.map (fun x -> type_check_exp en x) el in
+		(let el = List.map (fun x -> type_check_rexp en x) el in
 		match p with
 		  ML.Int _ -> 
 			if List.length el = 0 then ML.Int_t else type_error "Int takes no arguments"
@@ -173,9 +190,9 @@ let rec type_check_prim (en : env) (r : ML.rexp) : ML.tipe =
 			else type_error "Tl takes one argument")
 	| _ -> raise FatalError
 
-(* type_check_exp returns the tipe of the given expression if it typechecks
+(* type_check_rexp returns the tipe of the given expression if it typechecks
    internally; otherwise it raises TypeError *)
-and type_check_exp (en : env) (e : ML.exp) : ML.tipe = 
+and type_check_rexp (en : env) (e : ML.exp) : ML.tipe = 
 	let (r, _) = e in
 	match r with
 	  ML.Var x -> 
@@ -184,17 +201,20 @@ and type_check_exp (en : env) (e : ML.exp) : ML.tipe =
 		type_check_prim en r
 	| ML.Fn (x, e) -> 
 		let g = guess() in
-		ML.Fn_t (g, type_check_exp (extend en x (ML.Forall([], g))) e)
+		ML.Fn_t (g, type_check_rexp (extend en x (ML.Forall([], g))) e)
 	| ML.App (e1, e2) -> 
-		let (t1, t2, t) = (type_check_exp en e1, type_check_exp en e2, guess()) in
+		let (t1, t2, t) = (type_check_rexp en e1, type_check_rexp en e2, guess()) in
 		if unify t1 (ML.Fn_t(t2, t)) then t else 
 			type_error "Function expected type doesn't match received type"
 	| ML.If (e1, e2, e3) -> 
-		if unify (type_check_exp en e1) ML.Bool_t then
-			let (t2, t3) = (type_check_exp en e2, type_check_exp en e3) in
+		if unify (type_check_rexp en e1) ML.Bool_t then
+			let (t2, t3) = (type_check_rexp en e2, type_check_rexp en e3) in
 			if unify t2 t3 then t2 else type_error "Incompatible types: if-else" 
 		else 
 			type_error "Non-boolean value following if statement" 
 	| ML.Let (x, e1, e2) ->
-		let s = generalize en (type_check_exp en e1) in
-		type_check_exp (extend en x s) e2
+		let s = generalize en (type_check_rexp en e1) in
+		type_check_rexp (extend en x s) e2
+
+and type_check_exp (e : ML.exp) : ML.tipe =
+	type_check_rexp [] e
