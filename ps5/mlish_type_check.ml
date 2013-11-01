@@ -37,6 +37,7 @@ let rec substitute (t : ML.tipe) (subs : (ML.tvar * ML.tipe) list) : ML.tipe =
 		snd (List.hd (List.filter (fun p -> ((fst p) = tv)) subs)) in
 	match t with
 	  ML.Tvar_t tv -> find_tipe tv
+	| ML.Char_t -> ML.Char_t
 	| ML.Int_t -> ML.Int_t
 	| ML.Bool_t -> ML.Bool_t
 	| ML.Unit_t -> ML.Unit_t
@@ -68,7 +69,7 @@ let rec guesses_of (t : ML.tipe) : ML.tipe list =
 let rec subst_guesses (gs_vs : (ML.tipe * ML.tvar) list) (t : ML.tipe) : ML.tipe =
 	match t with
 	  ML.Tvar_t v -> raise FatalError
-	| ML.Int_t | ML.Bool_t | ML.Unit_t 
+	| ML.Int_t | ML.Bool_t | ML.Unit_t | ML.Char_t
 		-> t
 	| ML.Fn_t (x, y) -> ML.Fn_t (subst_guesses gs_vs x, subst_guesses gs_vs y)
 	| ML.Pair_t (x, y) -> ML.Pair_t (subst_guesses gs_vs x, subst_guesses gs_vs y)
@@ -149,6 +150,8 @@ let rec type_check_prim (en : env) (r : ML.rexp) : ML.tipe =
 		match p with
 		  ML.Int _ -> 
 			if List.length el = 0 then ML.Int_t else type_error "Int takes no arguments"
+		| ML.Char _ ->
+			if List.length el = 0 then ML.Char_t else type_error "Char takes no arguments"
 		| ML.Bool _ -> 
 			if List.length el = 0 then ML.Bool_t else type_error "Bool takes no arguments"
 		| ML.Unit -> 

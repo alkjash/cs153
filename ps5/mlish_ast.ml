@@ -4,6 +4,7 @@ type pos = int
 
 type tipe = 
   Tvar_t of tvar
+| Char_t
 | Int_t
 | Bool_t
 | Unit_t
@@ -18,6 +19,7 @@ type tipe_scheme = Forall of (tvar list) * tipe
 
 type prim = 
   Int of int
+| Char of char
 | Bool of bool
 | Unit   (* unit value -- () *)
 | Plus   (* add two ints *)
