@@ -126,6 +126,17 @@ let rec unify (t1 : ML.tipe) (t2 : ML.tipe) : bool =
 		-> unify a b 
 	| _ -> false
 
+(* Check if value is functional for the sake of primitive equality comparison *)
+let rec is_functional (t : ML.tipe) : bool =
+	match t with
+	  ML.Guess_t r -> (match !r with
+						  Some t2 -> is_functional t2
+						| None -> false)
+	| ML.Fn_t(_) -> true
+	| ML.Pair_t (a, b) -> (is_functional a) || (is_functional b)
+	| ML.List_t (a) -> is_functional a
+	| _ -> false
+
 (* Checking primitive MLish expressions *)
 let rec type_check_prim (en : env) (r : ML.rexp) : ML.tipe =
 	match r with
@@ -147,7 +158,9 @@ let rec type_check_prim (en : env) (r : ML.rexp) : ML.tipe =
 		| ML.Eq ->
 			if (List.length el = 2) then
 				if unify (List.hd el) (List.hd (List.tl el)) then
-					ML.Bool_t
+					if (is_functional (List.hd el)) then
+						type_error "Equality doesn't take functional values"
+					else ML.Bool_t
 				else type_error "Equality operation received two different types"
 			else type_error "Equality operation takes two arguments"
 		| ML.Lt -> 
