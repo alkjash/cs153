@@ -1,0 +1,1 @@
+if 5 < 3 then 'foo' else false
