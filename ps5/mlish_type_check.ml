@@ -47,6 +47,20 @@ let instantiate (ts : ML.tipe_scheme) : tipe =
 	let vs_and_ts = map (fun a -> (a, guess()) vs in
 	substitute t vs_and_ts
 
+(* Generalize: construct a tipe scheme defining a variable, substituting tvars into
+	all guesses *)
+let generalize (en : env) (t : tipe) : tipe_scheme =
+	let guesses_of (t1 : tipe) : 
+	let t_gs = guesses_of_tipe t in
+	let env_list_gs =
+		map (fun (x,s) -> guesses_of s) e in
+	let env_gs = foldl union empty env_list_gs
+	let diff = minus t_gs env_gs in
+	let gs_vs =
+		map (fun g -> (g,freshvar())) diff in
+	let tc = subst_guess(gs_vs,t) in
+		Forall(map snd gs_vs, tc)
+
 (* Unify: check if t1 and t2 can be of the same tipe; improve guesses so that
    they are the same tipe at the end *)
 let rec unify (t1 : ML.tipe) (t2 : ML.tipe) : bool =
@@ -149,4 +163,6 @@ and type_check_exp (en : env) (e : ML.exp) : ML.tipe =
 			if unify t2 t3 then t2 else type_error "Incompatible types: if-else" 
 		else 
 			type_error "Non-boolean value following if statement" 
-	| ML.Let (x, e1, e2) -> raise TODO
+	| ML.Let (x, e1, e2) ->
+		let s = generalize en (type_check_exp en e1) in
+		type_check_exp (extend en x s) e2
