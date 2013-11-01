@@ -239,7 +239,8 @@ and type_check_rexp (en : env) (e : ML.exp) : ML.tipe =
 	| ML.App (e1, e2) -> 
 		let (t1, t2, t) = (type_check_rexp en e1, type_check_rexp en e2, guess()) in
 		if unify t1 (ML.Fn_t(t2, t)) then t else 
-			type_error "Function expected type doesn't match received type"
+			type_error ("Function error: either applying a non-function or \n"
+					^ "expected type doesn't match received type")
 	| ML.If (e1, e2, e3) -> 
 		if unify (type_check_rexp en e1) ML.Bool_t then
 			let (t2, t3) = (type_check_rexp en e2, type_check_rexp en e3) in
