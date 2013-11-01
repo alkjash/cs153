@@ -3,7 +3,7 @@ module ML = Mlish_ast
 exception TODO
 exception FatalError
 exception TypeError
-let type_error(s:string) = (print_string s; raise TypeError)
+let type_error(s:string) = (print_string (s ^ "\n"); raise TypeError)
 
 (***************** Environment *******************************)
 type env = (Mlish_ast.var * Mlish_ast.tipe_scheme) list
@@ -75,7 +75,11 @@ let rec subst_guesses (gs_vs : (ML.tipe * ML.tvar) list) (t : ML.tipe) : ML.tipe
 	| ML.List_t t1 -> ML.List_t (subst_guesses gs_vs t1)
 	| ML.Guess_t r -> (match !r with
 					  None -> 
-						ML.Tvar_t (snd (List.hd (List.filter (fun y -> (fst y) = t) gs_vs)))
+						(let l = List.filter (fun y -> (fst y) = t) gs_vs in
+						if List.length l = 0 then
+							t 
+						else
+							ML.Tvar_t (snd (List.hd l)))
 					| Some t1 -> 
 						ML.Guess_t (ref (Some (subst_guesses gs_vs t1))))
 
@@ -215,7 +219,7 @@ let rec type_check_prim (en : env) (r : ML.rexp) : ML.tipe =
 					ML.List_t g
 				else type_error "Tl's argument is not a list"
 			else type_error "Tl takes one argument")
-	| _ -> raise FatalError
+	| _ -> raise FatalError 
 
 (* type_check_rexp returns the tipe of the given expression if it typechecks
    internally; otherwise it raises TypeError *)

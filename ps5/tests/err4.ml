@@ -1,2 +1,2 @@
-let f = fun x -> x in
-f = f
+let g = (fun y -> y) in 
+g = g
