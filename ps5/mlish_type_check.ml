@@ -65,7 +65,8 @@ let rec unify (t1 : ML.tipe) (t2 : ML.tipe) : bool =
 let rec type_check_prim (en : env) (r : ML.rexp) : ML.tipe =
 	match r with
 	  ML.PrimApp(p, el) -> 
-		(match p with
+		(let el = map (fun x -> type_check_exp en x) el in
+		match p with
 		  ML.Int _ -> 
 			if List.length el = 0 then ML.Int_t else type_error()
 		| ML.Bool _ -> 
@@ -73,18 +74,28 @@ let rec type_check_prim (en : env) (r : ML.rexp) : ML.tipe =
 		| ML.Unit -> ML.Unit_t
 			if List.length el = 0 then ML.Unit_t else type_error()
 		| ML.Plus | ML.Minus | ML.Times | ML.Div | ML.Eq | ML.Lt -> 
-			raise TODO
+			if (List.length el = 2) then
+			if (List.length (List.filter (fun x -> unify x ML.Int_t) el) = 2) then
+				ML.Int_t
+			else type_error "Arithmetic operations only take int"
+			else type_error "Arithmetic operations take two arguments"
 		| ML.Pair ->
-			match el with
-			  h::t -> ML.Pair_t(type_check_exp en h,type_check_exp en t)
-			| _ -> type_error ("Pair not valid")
+			if List.length el <> 2 then
+				type_error "Pair takes two arguments"
+			else
+				ML.Pair_t (type_check_exp en (List.hd el),type_check_exp en (List.hd (List.tl t)))
 		| ML.Fst -> 
 			match el with
-			  h::_ -> type_check_exp en h
-			| _ -> type_error ("Pair not valid")
+			  [h] -> let (t1, t2, t3) = (type_check_exp en h, guess(), guess()) in
+				if unify t1 (ML.Pair_t (t2, t3)) then t2 else
+				type_error "Fst must take a pair"
+			| _ -> type_error "Fst takes one argument"
 		| ML.Snd ->
 			match el with
-			  _::t -> type_check_exp en t
+			  [h] -> let (t1, t2, t3) = (type_check_exp en h, guess(), guess()) in
+				if unify t1 (ML.Pair_t (t2, t3)) then t3 else
+				type_error "Snd must take a pair"
+			| _ -> type_error "Snd takes one argument"
 		| ML.Nil -> ML.Tvar_t("nil") (* ??? *)
 		| ML.Cons -> raise TODO
 		| ML.IsNil -> raise TODO
