@@ -68,38 +68,63 @@ let rec type_check_prim (en : env) (r : ML.rexp) : ML.tipe =
 		(let el = map (fun x -> type_check_exp en x) el in
 		match p with
 		  ML.Int _ -> 
-			if List.length el = 0 then ML.Int_t else type_error()
+			if List.length el = 0 then ML.Int_t else type_error "Int takes no arguments"
 		| ML.Bool _ -> 
-			if List.length el = 0 then ML.Bool_t else type_error()
+			if List.length el = 0 then ML.Bool_t else type_error "Bool takes no arguments"
 		| ML.Unit -> ML.Unit_t
-			if List.length el = 0 then ML.Unit_t else type_error()
+			if List.length el = 0 then ML.Unit_t else type_error "Unit takes no arguments"
 		| ML.Plus | ML.Minus | ML.Times | ML.Div | ML.Eq | ML.Lt -> 
 			if (List.length el = 2) then
-			if (List.length (List.filter (fun x -> unify x ML.Int_t) el) = 2) then
-				ML.Int_t
-			else type_error "Arithmetic operations only take int"
+				if (List.length (List.filter (fun x -> unify x ML.Int_t) el) = 2) then
+					ML.Int_t
+				else type_error "Arithmetic operations only take int"
 			else type_error "Arithmetic operations take two arguments"
 		| ML.Pair ->
 			if List.length el <> 2 then
 				type_error "Pair takes two arguments"
 			else
-				ML.Pair_t (type_check_exp en (List.hd el),type_check_exp en (List.hd (List.tl t)))
+				ML.Pair_t (List.hd el, List.hd (List.tl t))
 		| ML.Fst -> 
 			match el with
-			  [h] -> let (t1, t2, t3) = (type_check_exp en h, guess(), guess()) in
+			  [h] -> let (t1, t2, t3) = (h, guess(), guess()) in
 				if unify t1 (ML.Pair_t (t2, t3)) then t2 else
 				type_error "Fst must take a pair"
 			| _ -> type_error "Fst takes one argument"
 		| ML.Snd ->
 			match el with
-			  [h] -> let (t1, t2, t3) = (type_check_exp en h, guess(), guess()) in
+			  [h] -> let (t1, t2, t3) = (h, guess(), guess()) in
 				if unify t1 (ML.Pair_t (t2, t3)) then t3 else
 				type_error "Snd must take a pair"
 			| _ -> type_error "Snd takes one argument"
-		| ML.Nil -> ML.Tvar_t("nil") (* ??? *)
-		| ML.Cons -> raise TODO
-		| ML.IsNil -> raise TODO
-		| ML.Hd | ML.Tl -> raise TODO)
+		| ML.Nil -> 
+			if List.length el = 0 then ML.List_t (guess()) (* Empty list of undetermined tipe *)
+			else type_error "Nil list takes no arguments"
+		| ML.Cons ->
+			if List.length el <> 2 then
+				type_error "Pair takes two arguments"
+			else let (t1, t2) = (List.hd el, List.hd (List.tl el)) in
+				if unify (ML.List_t t1) t2 then t2
+				else type_error "List head type doesn't match elements of tail"
+		| ML.IsNil -> 
+			if List.length el = 1 then
+				if unify (List.hd el) (ML.List_t (guess())) then
+					Bool_t
+				else type_error "IsNil's argument is not a list"
+			else type_error "IsNil takes one argument"
+		| ML.Hd ->
+			if List.length el = 1 then
+				let g = guess() in
+				if unify (List.hd el) (ML.List_t g) then
+					g
+				else type_error "Hd's argument is not a list"
+			else type_error "Hd takes one argument"
+		| ML.Tl ->
+			if List.length el = 1 then
+				let g = guess() in
+				if unify (List.hd el) (ML.List_t g) then
+					ML.List_t g
+				else type_error "Tl's argument is not a list"
+			else type_error "Tl takes one argument")
 	| _ -> raise FatalError
 
 (* type_check_exp returns the tipe of the given expression if it typechecks

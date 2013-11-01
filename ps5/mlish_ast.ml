@@ -15,6 +15,7 @@ type tipe =
 
 type tipe_scheme = Forall of (tvar list) * tipe
 (* 'tvar list' *)
+
 type prim = 
   Int of int
 | Bool of bool
