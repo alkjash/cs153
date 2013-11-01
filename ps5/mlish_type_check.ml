@@ -15,7 +15,7 @@ let extend (en : env) (x : Mlish_ast.var) (ts : Mlish_ast.tipe_scheme) : env =
 (* Lookup variable in env, if it doesn't exist raise type error unbound *)
 let lookup (en : env) (x : Mlish_ast.var) : Mlish_ast.tipe_scheme =
 	match (List.filter (fun y -> (fst y) = x) en) with
-	  [] -> type_error ("Unbound variable" ^ x)
+	  [] -> type_error ("Unbound variable " ^ x)
 	| h::t -> snd h
 
 (***************** Type-Checking ******************************)
@@ -236,7 +236,8 @@ and type_check_rexp (en : env) (e : ML.exp) : ML.tipe =
 	| ML.App (e1, e2) -> 
 		let (t1, t2, t) = (type_check_rexp en e1, type_check_rexp en e2, guess()) in
 		if unify t1 (ML.Fn_t(t2, t)) then t else 
-			type_error "Function expected type doesn't match received type"
+			type_error ("Function error: either applying a non-function or \n"
+					^ "expected type doesn't match received type")
 	| ML.If (e1, e2, e3) -> 
 		if unify (type_check_rexp en e1) ML.Bool_t then
 			let (t2, t3) = (type_check_rexp en e2, type_check_rexp en e3) in
