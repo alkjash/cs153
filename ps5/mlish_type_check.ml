@@ -21,7 +21,7 @@ let lookup (en : env) (x : Mlish_ast.var) : Mlish_ast.tipe_scheme =
 (***************** Type-Checking ******************************)
 
 (* Checking primitives *)
-let rec type_check_prim (r : ML.rexp) : ML.tipe =
+let rec type_check_prim (en : env) (r : ML.rexp) : ML.tipe =
 	match r with
 	  ML.PrimApp(p, el) -> 
 		(match p with
@@ -30,10 +30,18 @@ let rec type_check_prim (r : ML.rexp) : ML.tipe =
 		| ML.Unit -> ML.Unit_t
 		| ML.Plus | ML.Minus | ML.Times | ML.Div | ML.Eq | ML.Lt -> 
 			raise TODO
-		| ML.Pair -> raise TODO
-		| ML.Fst -> raise TODO
-		| ML.Snd -> raise TODO
-		| ML.Nil -> raise TODO
+		| ML.Pair ->
+			match el with
+			  h::t -> ML.Pair_t(type_check_exp en h,type_check_exp en t)
+			| _ -> type_error ("Pair not valid")
+		| ML.Fst -> 
+			match el with
+			  h::_ -> type_check_exp en h
+			| _ -> type_error ("Pair not valid")
+		| ML.Snd ->
+			match el with
+			  _::t -> type_check_exp en t
+		| ML.Nil -> ML.Tvar_t("nil") (* ??? *)
 		| ML.Cons -> raise TODO
 		| ML.IsNil -> raise TODO
 		| ML.Hd | ML.Tl -> raise TODO)
@@ -41,12 +49,21 @@ let rec type_check_prim (r : ML.rexp) : ML.tipe =
 
 (* type_check_exp returns the tipe of the given expression if it typechecks
    internally; otherwise it raises TypeError *)
-and type_check_exp (e : ML.exp) : ML.tipe = 
+and type_check_exp (en : env) (e : ML.exp) : ML.tipe = 
 	let (r, _) = e in
 	match r with
-	  ML.Var x -> raise TODO
-	| ML.PrimApp (_, _) -> type_check_prim r
-	| ML.Fn (x, e) -> raise TODO
-	| ML.App (e1, e2) -> raise TODO
-	| ML.If (e1, e2, e3) -> raise TODO
+	  ML.Var x -> let ML.Forall(_,t) = lookup en x in t
+	| ML.PrimApp (_, _) -> type_check_prim en r
+	| ML.Fn (x, e) -> ML.Fn_t(type_check_exp en (ML.Var x),type_check_exp en e)
+	| ML.App (e1, e2) -> 
+		match (type_check_exp en e1, type_check_exp en e2) with
+		| ML.Fn_t(t1,_), t ->
+			if (t1 != t) then type_error ("Function expected type" ^t1^"but received"^t)
+		| _, _ -> type_error ("Cannot be applied")
+	| ML.If (e1, e2, e3) -> 
+		(let (t1,t2,t3) = (type_check_exp en e1,type_check_exp en e2,type_check_exp en e3) in
+			match t1 with
+			| Bool_t ->
+				if (t2 != t3) then type_error ("Incompatible types: if-else") else t2
+			| _ -> type_error ("Non-boolean value following if statement")
 	| ML.Let (x, e1, e2) -> raise TODO
