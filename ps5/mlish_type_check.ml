@@ -171,7 +171,7 @@ let rec type_check_prim (en : env) (r : ML.rexp) : ML.tipe =
 			if (List.length el = 2) then
 				if (List.length (List.filter (fun x -> unify x ML.Int_t) el) = 2) then
 					ML.Bool_t
-				else type_error "Less than operation only take int"
+				else type_error "Less than operation only takes int"
 			else type_error "Less than operation takes two arguments"
 		| ML.Pair ->
 			if List.length el <> 2 then
