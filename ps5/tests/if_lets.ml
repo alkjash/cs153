@@ -1,1 +1,1 @@
-if isnil [] then let x = 4 else let x = 3
+if isnil [] then 4 else let x = 3 in 3
