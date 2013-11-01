@@ -51,5 +51,5 @@ and compile_exp (en : exp_env) (e : ML.exp) : S.exp =
 	| ML.App (e1, e2) -> S.App ((compile_exp en e1), (compile_exp en e2))
 	| ML.If (e1, e2, e3) -> 
 		S.If ((compile_exp e1), (compile_exp en e2), (compile_exp en e3))
-	| ML.Let (x, e1, e2) ->
-		S.sLet x (compile_exp en e1) (compile_exp en e2)
+	| ML.Let (x, e1, e2) -> let se = compile_exp en e1 in
+		S.sLet x se (compile_exp (insert en x se) e2)
