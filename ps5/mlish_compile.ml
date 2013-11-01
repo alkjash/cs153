@@ -31,6 +31,7 @@ let rec compile_primexp (en : exp_env) (e : ML.rexp) : S.exp =
 	let el = List.map (fun y -> compile_rexp en y) el in
 	match p with
 	  ML.Int i  -> S.Int i
+	| ML.Char c -> S.Int (int_of_char c)
 	| ML.Bool b -> (if b then S.Int 1 else S.Int 0) 
 	| ML.Unit   -> S.Int 0 (* unit value -- () *)
 	| ML.Plus   -> S.PrimApp(S.Plus, el) (* add two ints *)

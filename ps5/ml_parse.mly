@@ -31,6 +31,7 @@ let parse_error s =
 %token TILDE NIL LBRACKET RBRACKET CONS
 %token DARROW LET IN END FN VAL EOF
 %token <int> INT
+%token <char> CHAR
 %token <string> ID
 
 /* define precedences */
@@ -71,6 +72,7 @@ aexp :
 
 bexp :
   INT { (PrimApp(Int($1),[]), rhs 1) }
+| CHAR { (PrimApp(Char($1),[]), rhs 1)}
 | TRUE { (PrimApp(Bool(true),[]), rhs 1) }
 | FALSE { (PrimApp(Bool(false),[]), rhs 1) }
 | NIL { (PrimApp(Nil,[]), rhs 1) }
