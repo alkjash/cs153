@@ -281,7 +281,19 @@ let count_table (e:exp) =
     occ_e e; table
 
 (* dead code elimination *)
-let dce (e:exp) : exp = raise TODO
+let dce (e:exp) : exp =
+  match e with
+  | Return w -> Return w
+  | LetValue(x,v,e) ->
+      let ct = count_table e in
+      (match v with
+      | Lambda _ ->
+        (match get_calls ct x with
+          | 0 -> LetValue(x,v,dce e)
+          | 1 -> )
+      | _ ->
+        if get_uses ct x = 0 then dce e
+        else LetValue(x,v,dce e)
 
 (* (1) inline functions 
  * (2) reduce LetIf expressions when the value being tested is a constant.
