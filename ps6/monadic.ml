@@ -382,7 +382,7 @@ let never_inline_thresh  (e : exp) : bool = false (** Never inline  **)
  *)
 let constructor_counter (n : int) (e : exp) : int =
   match e with
-  | Return -> n
+  | Return op -> n
   | LetVal(_,_,e) -> constructor_counter n+1 e
   | LetCall(_,_,_,e) -> constructor_counter n+1 e
   | LetIf(_,_,w,e1,e2) -> (constructor_counter n+1 e) + (constructor_counter n+1 e1)
@@ -395,7 +395,32 @@ let size_inline_thresh (i : int) (e : exp) : bool =
 (* inlining 
  * only inline the expression e if (inline_threshold e) return true.
  *)
-let inline (inline_threshold: exp -> bool) (e:exp) : exp = e (* TODO *)
+let rec inline (inline_threshold: exp -> bool) (e:exp) : exp =
+  (* if (inline_threshold e) then *)
+  inline_e inline_threshold e "" Op("")
+  (* let table = count_table e in
+  inline_e e table "" *)
+
+and inline_e it e name fcn =
+  if it e then
+    match e with
+    | Return _ -> e
+    | LetVal (f,Lambda(y,e),e2) ->
+        let t = count_table e2 in
+        if get_calls t f = 1 then inline_e it e2 f Lambda(y,e)
+        else LetVal(f,Lambda(y,e),inline_e it e2 name fcn)
+    | LetVal (x,v,e) ->
+        LetVal(x,v,inline_e it e name fcn)
+    | LetCall (v,o1,o2,e) ->
+        if name = o1 then 
+          let Lambda(x,e1) = fcn in
+          LetVal(v,LetVal(x,Op o2,e1),e)
+        else
+          LetCall(v,o1,o2,inline_e it e name fcn)
+    | LetIf(v,op,e,e1,e2) ->
+        match e with
+        | Return b -> e1 (* test e for true/false? *)
+  else e
 
 (* reduction of conditions
  * - Optimize conditionals based on contextual information, e.g.
