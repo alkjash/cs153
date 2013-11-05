@@ -380,14 +380,13 @@ let never_inline_thresh  (e : exp) : bool = false (** Never inline  **)
 (* return true if the expression e is smaller than i, i.e. it has fewer
  * than i constructors
  *)
-let constructor_counter (n : int) (e : exp) : int =
+let rec constructor_counter (n : int) (e : exp) : int =
   match e with
   | Return op -> n
-  | LetVal(_,_,e) -> constructor_counter n+1 e
-  | LetCall(_,_,_,e) -> constructor_counter n+1 e
-  | LetIf(_,_,w,e1,e2) -> (constructor_counter n+1 e) + (constructor_counter n+1 e1)
-      + (constructor_counter n+1 e2)
-  | _ -> raise FatalError
+  | LetVal(_,_,e) -> constructor_counter (n+1) e
+  | LetCall(_,_,_,e) -> constructor_counter (n+1) e
+  | LetIf(_,_,w,e1,e2) -> (constructor_counter (n+1) e) + (constructor_counter (n+1) e1)
+      + (constructor_counter (n+1) e2)
 
 let size_inline_thresh (i : int) (e : exp) : bool =
   (constructor_counter 0 e) < i
@@ -397,7 +396,7 @@ let size_inline_thresh (i : int) (e : exp) : bool =
  *)
 let rec inline (inline_threshold: exp -> bool) (e:exp) : exp =
   (* if (inline_threshold e) then *)
-  inline_e inline_threshold e "" Op("")
+  inline_e inline_threshold e (Var "") (Op (Var ""))
   (* let table = count_table e in
   inline_e e table "" *)
 
@@ -406,15 +405,15 @@ and inline_e it e name fcn =
   | Return _ -> e
   | LetVal (f,Lambda(x,e1),e2) ->
       let t = count_table e2 in
-      if get_calls t f = 1 || inline_threshold e1 then
-        LetVal(f,Lambda(x,e1),inline_e it e2 f Lambda(x,e1))
+      if get_calls t f = 1 || it e1 then
+        LetVal(f,Lambda(x,e1),inline_e it e2 (Var f) (Lambda(x,e1)))
       else LetVal(f,Lambda(x,e1),inline_e it e2 name fcn)
   | LetVal (x,v,e) ->
       LetVal(x,v,inline_e it e name fcn)
   | LetCall (y,f,w,e2) ->
       if name = f then 
         let Lambda(x,e1) = fcn in
-        LetVal(y,LetVal(x,Op w,e1),e2)
+        splice y (LetVal(x,Op w,e1)) e2
       else
         LetCall(y,f,w,inline_e it e2 name fcn)
   | LetIf(v,op,e,e1,e2) ->
