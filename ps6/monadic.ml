@@ -395,7 +395,7 @@ let size_inline_thresh (i : int) (e : exp) : bool =
 (* inlining 
  * only inline the expression e if (inline_threshold e) return true.
  *)
-<<<<<<< HEAD
+
 let rec inline (inline_threshold: exp -> bool) (e:exp) : exp =
   (* if (inline_threshold e) then *)
   inline_e inline_threshold e "" Op("")
@@ -403,28 +403,24 @@ let rec inline (inline_threshold: exp -> bool) (e:exp) : exp =
   inline_e e table "" *)
 
 and inline_e it e name fcn =
-  if it e then
-    match e with
-    | Return _ -> e
-    | LetVal (f,Lambda(y,e),e2) ->
-        let t = count_table e2 in
-        if get_calls t f = 1 then inline_e it e2 f Lambda(y,e)
-        else LetVal(f,Lambda(y,e),inline_e it e2 name fcn)
-    | LetVal (x,v,e) ->
-        LetVal(x,v,inline_e it e name fcn)
-    | LetCall (v,o1,o2,e) ->
-        if name = o1 then 
-          let Lambda(x,e1) = fcn in
-          LetVal(v,LetVal(x,Op o2,e1),e)
-        else
-          LetCall(v,o1,o2,inline_e it e name fcn)
-    | LetIf(v,op,e,e1,e2) ->
-        match e with
-        | Return b -> e1 (* test e for true/false? *)
-  else e
-=======
-let inline (inline_threshold : exp -> bool) (e:exp) : exp = e (* TODO *)
->>>>>>> 5b64fe708cd23834333334b7286834ad1f10bd7b
+  match e with
+  | Return _ -> e
+  | LetVal (f,Lambda(x,e1),e2) ->
+      let t = count_table e2 in
+      if get_calls t f = 1 || inline_threshold e1 then
+        LetVal(f,Lambda(x,e1),inline_e it e2 f Lambda(x,e1))
+      else LetVal(f,Lambda(x,e1),inline_e it e2 name fcn)
+  | LetVal (x,v,e) ->
+      LetVal(x,v,inline_e it e name fcn)
+  | LetCall (y,f,w,e2) ->
+      if name = f then 
+        let Lambda(x,e1) = fcn in
+        LetVal(y,LetVal(x,Op w,e1),e2)
+      else
+        LetCall(y,f,w,inline_e it e2 name fcn)
+  | LetIf(v,op,e,e1,e2) ->
+      LetIf(v,op,inline_e it e name fcn,inline_e it e1 name fcn,
+        inline_e it e2 name fcn)
 
 (* reduction of conditions
  * - Optimize conditionals based on contextual information, e.g.
