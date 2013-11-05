@@ -395,7 +395,6 @@ let size_inline_thresh (i : int) (e : exp) : bool =
 (* inlining 
  * only inline the expression e if (inline_threshold e) return true.
  *)
-
 let rec inline (inline_threshold: exp -> bool) (e:exp) : exp =
   (* if (inline_threshold e) then *)
   inline_e inline_threshold e "" Op("")
