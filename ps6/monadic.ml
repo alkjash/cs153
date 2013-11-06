@@ -177,8 +177,45 @@ let cse (e : exp) : exp = raise TODO
 (* constant folding
  * Apply primitive operations which can be evaluated. e.g. fst (1,2) = 1
  *)
-let cfold (e : exp) : exp = raise TODO
 
+(* Passes through code calling cfold_val on each value that appears *)
+let rec cfold (e : exp) : exp =
+	match e with
+	  Return _ -> e
+	| LetVal (x, v, e) ->
+		LetVal (x, cfold_val v, cfold e)
+	| LetCall (x, o1, o2, e) -> 
+		LetCall (x, o1, o2, cfold e)
+	| LetIf (x, o1, e1, e2, e3) -> 
+		LetIf (x, o1, cfold e1, cfold e2, cfold e3)
+
+(* Apply primitive operations in monadic values *)
+and cfold_val (v: value) : value =
+	match v with
+	  Op _ -> v
+	| PrimApp (s_op, l) ->
+		(* Currently only folds arithmetic and comparison operators *)
+		(match s_op with
+		  S.Plus | S.Minus | S.Times | S.Div 
+		| S.Eq | S.Lt ->
+			(match l with
+		  	  [Int a; Int b] -> 
+				(match s_op with
+				  S.Plus -> Op (Int (a + b))
+				| S.Minus -> Op (Int (a - b))
+				| S.Times -> Op (Int (a * b))
+				| S.Div -> Op (Int (a / b))
+				| S.Eq -> Op (Int (if (a == b) then 1 else 0))
+				| S.Lt -> Op (Int (if (a < b) then 1 else 0))
+				| _ -> v (* Can't do anything about a cons *))
+			| [Int 1; Var x] | [Var x; Int 1] ->
+				(match s_op with
+				  S.Times -> Op (Var x) (* Fold 1 * x = x * 1 = x *)
+				| _ -> v)
+			| _ -> v)
+		| _ -> v)
+	| Lambda (x, e) ->
+		Lambda (x, cfold e)
 
 (* To support a somewhat more efficient form of dead-code elimination and
  * inlining, we first construct a table saying how many times each variable 
@@ -231,7 +268,7 @@ let count_table (e:exp) =
     occ_e e; table
 
 (* dead code elimination *)
-let dce (e:exp) : exp = raise TODO 
+let dce (e:exp) : exp = raise TODO
 
 (* (1) inline functions 
  * (2) reduce LetIf expressions when the value being tested is a constant.
@@ -278,7 +315,7 @@ let always_inline_thresh (e : exp) : bool = true  (** Always inline **)
 let never_inline_thresh  (e : exp) : bool = false (** Never inline  **)
 
 (* return true if the expression e is smaller than i, i.e. it has fewer
- * constructors
+ * than i constructors
  *)
 let size_inline_thresh (i : int) (e : exp) : bool = raise TODO 
 
