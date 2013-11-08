@@ -13,13 +13,6 @@ exception FatalError
  * live at some same point with it  *)
 type interfere_graph = var -> var list
 
-(* Representation of pred and succ relations between blocks *)
-type block_graph = label -> label list 
-let extend_bg g b l =
-	if List.mem l (g b) then g 
-	else (fun b' -> if b' = b then l :: (g b') else g b')
-let empty_bg b = []
-
 (* Make whole fnc global for easy lookup *)
 let fnc = ref []
 
@@ -37,6 +30,13 @@ let btl (b : block) : label =
 	  Label l -> l
 	| _ -> raise FatalError
 
+(* Representation of pred and succ relations between blocks *)
+type block_graph = block -> block list 
+let extend_bg g b1 b2 =
+	if List.mem b2 (g b1) then g 
+	else (fun b -> if b = b1 then b2 :: (g b) else g b)
+let empty_bg b = []
+
 (* Helper function that adds in all the out-edges of a block to the pred graph *)
 let calc_out (pred : block_graph) (b : block) : block_graph = 
 	let rec tail b =
@@ -45,17 +45,17 @@ let calc_out (pred : block_graph) (b : block) : block_graph =
 		| [i] -> i
 		| _ :: t -> tail t in
 	match tail b with
-	  Jump l -> 
-	| If (_, _, _, l1, l2) ->
+	  Jump l -> extend_bg pred (ltb l) b
+	| If (_, _, _, l1, l2) -> extend_bg (extend_bg pred (ltb l1) b) (ltb l2) b
 	| Return _ -> pred
 	| _ -> raise FatalError
 
 (* For each block, calculate all its predecessor and successor blocks *)
 let calc_block_graph (f : func) : (block_graph * block_graph) =
 	let pred = empty_bg in
-	List.foldr (
+	let pred = List.fold_left calc_out pred f in
 	let succ = empty_bg in
-	raise Implement_Me
+	(pred, succ)
 
 (* general type for storing LiveIn and LiveOut - takes as input
  * block and inst index within that block and outputs a list of vars *)
