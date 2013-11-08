@@ -172,7 +172,7 @@ and cprop_oper (env : var -> operand option) (w:operand) =
 let cprop e = cprop_exp empty_env e
 
 (* common sub-value elimination -- as in the slides *)
-let cse (e : exp) : exp = raise TODO 
+let cse (e : exp) : exp = e (* raise TODO *)
 
 (* constant folding
  * Apply primitive operations which can be evaluated. e.g. fst (1,2) = 1
@@ -268,7 +268,11 @@ let count_table (e:exp) =
     occ_e e; table
 
 (* dead code elimination *)
-let dce (e:exp) : exp = raise TODO
+let dce (e:exp) : exp = e
+(*	match e with
+	  Return _ -> e
+	| LetVal (x, v, e) -> 
+	| LetCall(x, o1, o2, e) -> *)
 
 (* (1) inline functions 
  * (2) reduce LetIf expressions when the value being tested is a constant.
@@ -317,12 +321,12 @@ let never_inline_thresh  (e : exp) : bool = false (** Never inline  **)
 (* return true if the expression e is smaller than i, i.e. it has fewer
  * than i constructors
  *)
-let size_inline_thresh (i : int) (e : exp) : bool = raise TODO 
+let size_inline_thresh (i : int) (e : exp) : bool = false (* TODO *)
 
 (* inlining 
  * only inline the expression e if (inline_threshold e) return true.
  *)
-let inline (inline_threshold: exp -> bool) (e:exp) : exp = raise TODO 
+let inline (inline_threshold: exp -> bool) (e:exp) : exp = e (* TODO *)
 
 (* reduction of conditions
  * - Optimize conditionals based on contextual information, e.g.
@@ -331,8 +335,7 @@ let inline (inline_threshold: exp -> bool) (e:exp) : exp = raise TODO
  *   (since x < 1 implies x < 2)
  * - This is similar to constant folding + logic programming
  *)
-let redtest (e:exp) : exp = raise EXTRA_CREDIT 
- 
+let redtest (e:exp) : exp = e (* TODO *)
 
 (* optimize the code by repeatedly performing optimization passes until
  * there is no change. *)
