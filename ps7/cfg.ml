@@ -30,7 +30,7 @@ let calc_block_graph (f : func) : (block_graph * block_graph) =
  * block and inst index within that block and outputs a list of vars *)
 type env = block -> int -> var list
 let extend_env e b i x =
-	raise Implement_Me
+	(b,i,x) :: e
 let empty_env b i = []
 
 (* given a function (i.e., list of basic blocks), construct the
