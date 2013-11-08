@@ -23,7 +23,6 @@ let nl='\010'
 let eol=(cr nl|nl|cr)
 let ws=('\012'|'\t'|' ')*
 let digit=['0'-'9']
-let character=['a'-'z']
 
 let id = ['a'-'z''_']['a'-'z''A'-'Z''0'-'9''_''\'']*
 
@@ -33,7 +32,7 @@ rule lexer = parse
 | eol { incr_lineno lexbuf; lexer lexbuf }
 | ws+ { lexer lexbuf }
 | digit+ { INT(int_of_string(Lexing.lexeme lexbuf)) }
-| character { CHAR(char_of_int (int_of_string(Lexing.lexeme lexbuf))) }
+| '\'' { QUOTE }
 | "::" { CONS }
 | '~' { TILDE }
 | '+' { PLUS }

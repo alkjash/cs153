@@ -172,7 +172,20 @@ and cprop_oper (env : var -> operand option) (w:operand) =
 let cprop e = cprop_exp empty_env e
 
 (* common sub-value elimination -- as in the slides *)
-let cse (e : exp) : exp = e (* raise TODO *)
+let rec cse (env : var -> operand option) (e : exp) : exp =
+  match e with
+  | Return w -> Return w
+  | LetValue(x,v,e) ->
+    (match env v with
+      | None -> LetValue(x,cse_val env v,cse (extend env v x) e)
+      | Some y -> LetValue(x,Op(Var y),cse env e))
+  | LetCall(x,f,w,e) -> LetCall(x,f,w,cse env e)
+  | LetIf(x,w,e1,e2,e) ->
+      LetIf(x,w,cse env e1,cse env e2,cse env e)
+and cse_val (env : var -> operand option) (v : value) : value =
+  match v with
+  | Lambda(x,e) -> Lambda(x,cse env e)
+  | v -> v
 
 (* constant folding
  * Apply primitive operations which can be evaluated. e.g. fst (1,2) = 1
@@ -268,11 +281,19 @@ let count_table (e:exp) =
     occ_e e; table
 
 (* dead code elimination *)
-let dce (e:exp) : exp = e
-(*	match e with
-	  Return _ -> e
-	| LetVal (x, v, e) -> 
-	| LetCall(x, o1, o2, e) -> *)
+let dce (e:exp) : exp =
+  match e with
+  | Return w -> Return w
+  | LetValue(x,v,e) ->
+      let ct = count_table e in
+      (match v with
+      | Lambda _ ->
+        (match get_calls ct x with
+          | 0 -> LetValue(x,v,dce e)
+          | 1 -> )
+      | _ ->
+        if get_uses ct x = 0 then dce e
+        else LetValue(x,v,dce e)
 
 (* (1) inline functions 
  * (2) reduce LetIf expressions when the value being tested is a constant.
