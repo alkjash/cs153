@@ -64,6 +64,15 @@ let extend_env e b i x =
 	(b,i,x) :: e
 let empty_env b i = []
 
+let calc_vars_b insts gen kill b i : (env * env) =
+  match insts with
+  | h::t -> (extend_env gen b i+1 (get_vars h), extend_env kill b i+1 (get_vars h))
+
+let get_vars ins : var list =
+  match ins with
+  | Label l -> []
+  | Move (x,y) -> (extend_env gen 
+
 (* given a function (i.e., list of basic blocks), construct the
  * interference graph for that function.  This will require that
  * you build a dataflow analysis for calculating what set of variables
