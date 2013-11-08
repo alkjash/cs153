@@ -14,15 +14,46 @@ exception FatalError
 type interfere_graph = var -> var list
 
 (* Representation of pred and succ relations between blocks *)
-type block_graph = block -> block list 
-let extend_bg g b1 b2 =
-	if List.mem b2 (g b1) then g 
-	else (fun b -> if b = b1 then b2 :: (g b1) else g b)
+type block_graph = label -> label list 
+let extend_bg g b l =
+	if List.mem l (g b) then g 
+	else (fun b' -> if b' = b then l :: (g b') else g b')
 let empty_bg b = []
+
+(* Make whole fnc global for easy lookup *)
+let fnc = ref []
+
+(* Match labels with blocks and vice-versa *)
+(* label-to-block *)
+let ltb (l : label) : block =
+	let f = (!fnc) in
+	match List.filter (fun b -> List.hd b = Label l) f with
+	  [b] -> b
+	| _ -> raise FatalError
+
+(* block-to-label *)
+let btl (b : block) : label =
+	match List.hd b with
+	  Label l -> l
+	| _ -> raise FatalError
+
+(* Helper function that adds in all the out-edges of a block to the pred graph *)
+let calc_out (pred : block_graph) (b : block) : block_graph = 
+	let rec tail b =
+		match b with
+		  [] -> raise FatalError
+		| [i] -> i
+		| _ :: t -> tail t in
+	match tail b with
+	  Jump l -> 
+	| If (_, _, _, l1, l2) ->
+	| Return _ -> pred
+	| _ -> raise FatalError
 
 (* For each block, calculate all its predecessor and successor blocks *)
 let calc_block_graph (f : func) : (block_graph * block_graph) =
 	let pred = empty_bg in
+	List.foldr (
 	let succ = empty_bg in
 	raise Implement_Me
 
@@ -38,6 +69,8 @@ let empty_env b i = []
  * you build a dataflow analysis for calculating what set of variables
  * are live-in and live-out for each program point. *)
 let build_interfere_graph (f : func) : interfere_graph =
+	(* Update fnc to f; used globally throughout rest of calculation *)
+	let _ = (fnc := f) in
 	(* Construct graph of pred's and succ's between blocks *)
 	let (pred, succ) = calc_block_graph f in
 	(* Calculate Live-In and Live-Out sets of each program instruction recursively *)
