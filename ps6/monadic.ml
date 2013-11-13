@@ -4,6 +4,7 @@ module S = Scish_ast
 type var = string
 
 exception TODO
+exception FatalError
 exception EXTRA_CREDIT
 
 (* operands -- pure and small *)
@@ -172,7 +173,12 @@ and cprop_oper (env : var -> operand option) (w:operand) =
 let cprop e = cprop_exp empty_env e
 
 (* common sub-value elimination -- as in the slides *)
-let rec cse (env : var -> operand option) (e : exp) : exp =
+
+let rec cse (e : exp) : exp = 
+	e
+
+(*
+and cse1 (e : exp) (en : fun var -> operand option) : exp =
   match e with
   | Return w -> Return w
   | LetValue(x,v,e) ->
@@ -186,6 +192,7 @@ and cse_val (env : var -> operand option) (v : value) : value =
   match v with
   | Lambda(x,e) -> Lambda(x,cse env e)
   | v -> v
+*)
 
 (* constant folding
  * Apply primitive operations which can be evaluated. e.g. fst (1,2) = 1
@@ -193,42 +200,66 @@ and cse_val (env : var -> operand option) (v : value) : value =
 
 (* Passes through code calling cfold_val on each value that appears *)
 let rec cfold (e : exp) : exp =
+	cfold1 e empty_env
+
+(* Keep an environment consisting of all the pairs currently defined for the sake of folding fst and snd *)
+and cfold1 (e : exp) (en: var -> value option) : exp =
 	match e with
 	  Return _ -> e
 	| LetVal (x, v, e) ->
-		LetVal (x, cfold_val v, cfold e)
+		let w = cfold_val v en in
+		let (w, en) = (match w with 
+		  			Some (Op _ as w) | Some (Lambda _ as w) -> (w, en)
+				  | Some w -> (w, extend en x w)
+				  | None -> (v, en)) in
+		LetVal (x, v, cfold e en)
 	| LetCall (x, o1, o2, e) -> 
-		LetCall (x, o1, o2, cfold e)
+		LetCall (x, o1, o2, cfold e en)
 	| LetIf (x, o1, e1, e2, e3) -> 
-		LetIf (x, o1, cfold e1, cfold e2, cfold e3)
+		(* Don't update en with new pairs added in e1, e2, since these aren't necessarily the values we want *)
+		LetIf (x, o1, cfold e1 en, cfold e2 en, cfold e3 en)
 
-(* Apply primitive operations in monadic values *)
-and cfold_val (v: value) : value =
+(* Apply primitive operations in monadic values
+ * Returns folded value (to replace original v with) if it is different; returns the value if it is a cons,
+ * and returns None if no folding to do *)
+and cfold_val (v: value) (en : var -> value option) : (value option) =
 	match v with
-	  Op _ -> v
+	  Op _ -> None 
 	| PrimApp (s_op, l) ->
-		(* Currently only folds arithmetic and comparison operators *)
 		(match s_op with
+		(* Arithmetic and comparison operators: just do it if both constants *)
 		  S.Plus | S.Minus | S.Times | S.Div 
 		| S.Eq | S.Lt ->
 			(match l with
 		  	  [Int a; Int b] -> 
-				(match s_op with
+				Some (match s_op with
 				  S.Plus -> Op (Int (a + b))
 				| S.Minus -> Op (Int (a - b))
 				| S.Times -> Op (Int (a * b))
 				| S.Div -> Op (Int (a / b))
 				| S.Eq -> Op (Int (if (a == b) then 1 else 0))
-				| S.Lt -> Op (Int (if (a < b) then 1 else 0))
-				| _ -> v (* Can't do anything about a cons *))
+				| S.Lt -> Op (Int (if (a < b) then 1 else 0)))	
 			| [Int 1; Var x] | [Var x; Int 1] ->
 				(match s_op with
-				  S.Times -> Op (Var x) (* Fold 1 * x = x * 1 = x *)
-				| _ -> v)
-			| _ -> v)
-		| _ -> v)
+				  S.Times -> Some (Op (Var x)) (* Fold 1 * x = x * 1 = x *)
+				| _ -> None)
+			| _ -> None)
+		(* When v is a cons, return it to be added to env for future folding of pairs *)
+		| S.Cons -> Some v
+		(* Fold a fst/snd (cons) by looking it up in the env, if it is there *)
+		| S.Fst | S.Snd ->
+			(match l with
+			  [Var x] -> (match en x with
+							(* If found in environment fold the fst/snd *)
+						    Some v -> (match v with
+							            PrimApp (_, l) -> if s_op = S.Fst then fst l else snd l
+									  | _ -> raise FatalError)
+							(* Otherwise do nothing *)
+						  | None -> None)
+			| _ -> raise FatalError))
 	| Lambda (x, e) ->
-		Lambda (x, cfold e)
+		(* Nothing actually happened to en; just defining a function *)
+		Some (Lambda (x, cfold e en))
 
 (* To support a somewhat more efficient form of dead-code elimination and
  * inlining, we first construct a table saying how many times each variable 
@@ -281,19 +312,20 @@ let count_table (e:exp) =
     occ_e e; table
 
 (* dead code elimination *)
-let dce (e:exp) : exp =
+let rec dce (e:exp) : exp =
   match e with
   | Return w -> Return w
-  | LetValue(x,v,e) ->
+  | LetVal(x,v,e) ->
       let ct = count_table e in
       (match v with
       | Lambda _ ->
         (match get_calls ct x with
-          | 0 -> LetValue(x,v,dce e)
-          | 1 -> )
+          | 0 -> LetVal(x,v,dce e)
+          | _ -> raise TODO)
       | _ ->
         if get_uses ct x = 0 then dce e
-        else LetValue(x,v,dce e)
+        else LetVal(x,v,dce e))
+  | _ -> raise TODO
 
 (* (1) inline functions 
  * (2) reduce LetIf expressions when the value being tested is a constant.
