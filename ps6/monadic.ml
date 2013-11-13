@@ -173,26 +173,23 @@ and cprop_oper (env : var -> operand option) (w:operand) =
 let cprop e = cprop_exp empty_env e
 
 (* common sub-value elimination -- as in the slides *)
-
 let rec cse (e : exp) : exp = 
-	e
+	cse1 empty_env e
 
-(*
-and cse1 (e : exp) (en : fun var -> operand option) : exp =
+and cse1 (en : value -> var option) (e : exp) : exp =
   match e with
   | Return w -> Return w
   | LetValue(x,v,e) ->
     (match env v with
-      | None -> LetValue(x,cse_val env v,cse (extend env v x) e)
-      | Some y -> LetValue(x,Op(Var y),cse env e))
-  | LetCall(x,f,w,e) -> LetCall(x,f,w,cse env e)
+      | None -> LetValue(x,cse_val env v,cse1 (extend env x v) e)
+      | Some y -> LetValue(x,Op(Var y),cse1 env e))
+  | LetCall(x,f,w,e) -> LetCall(x,f,w,cse1 env e)
   | LetIf(x,w,e1,e2,e) ->
-      LetIf(x,w,cse env e1,cse env e2,cse env e)
-and cse_val (env : var -> operand option) (v : value) : value =
+      LetIf(x,w,cse1 env e1,cse1 env e2,cse1 env e)
+and cse_val (env : value -> var option) (v : value) : value =
   match v with
-  | Lambda(x,e) -> Lambda(x,cse env e)
+  | Lambda(x,e) -> Lambda(x,cse1 env e)
   | v -> v
-*)
 
 (* constant folding
  * Apply primitive operations which can be evaluated. e.g. fst (1,2) = 1
@@ -318,14 +315,17 @@ let rec dce (e:exp) : exp =
   | LetVal(x,v,e) ->
       let ct = count_table e in
       (match v with
-      | Lambda _ ->
+      | Lambda(y,e) ->
         (match get_calls ct x with
-          | 0 -> LetVal(x,v,dce e)
-          | _ -> raise TODO)
+          | 0 -> LetValue(x,v,dce e)
+          | 1 -> LetValue(y,Op w))
       | _ ->
         if get_uses ct x = 0 then dce e
-        else LetVal(x,v,dce e))
-  | _ -> raise TODO
+        else LetValue(x,v,dce e)
+  | LetCall(x,f,w,e) ->
+      LetCall(x,f,w,dce e)
+  | LetIf(x,w,e1,e2,e) ->
+      LetIf(x,w,dce e1,dce e2,dce e)
 
 (* (1) inline functions 
  * (2) reduce LetIf expressions when the value being tested is a constant.
