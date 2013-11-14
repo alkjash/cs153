@@ -174,15 +174,17 @@ let cprop e = cprop_exp empty_env e
 
 (* common sub-value elimination -- as in the slides *)
 let rec cse (e : exp) : exp = 
+	e
+(*
 	cse1 empty_env e
 
-and cse1 (en : value -> var option) (e : exp) : exp =
+and cse1 (env : value -> var option) (e : exp) : exp =
   match e with
   | Return w -> Return w
-  | LetValue(x,v,e) ->
+  | LetVal(x,v,e) ->
     (match env v with
-      | None -> LetValue(x,cse_val env v,cse1 (extend env x v) e)
-      | Some y -> LetValue(x,Op(Var y),cse1 env e))
+      | None -> LetVal(x, cse_val env v,cse1 (extend env x v) e)
+      | Some y -> LetVal(x,Op(Var y),cse1 env e))
   | LetCall(x,f,w,e) -> LetCall(x,f,w,cse1 env e)
   | LetIf(x,w,e1,e2,e) ->
       LetIf(x,w,cse1 env e1,cse1 env e2,cse1 env e)
@@ -190,6 +192,7 @@ and cse_val (env : value -> var option) (v : value) : value =
   match v with
   | Lambda(x,e) -> Lambda(x,cse1 env e)
   | v -> v
+*)
 
 (* constant folding
  * Apply primitive operations which can be evaluated. e.g. fst (1,2) = 1
@@ -209,12 +212,12 @@ and cfold1 (e : exp) (en: var -> value option) : exp =
 		  			Some (Op _ as w) | Some (Lambda _ as w) -> (w, en)
 				  | Some w -> (w, extend en x w)
 				  | None -> (v, en)) in
-		LetVal (x, v, cfold e en)
+		LetVal (x, w, cfold1 e en)
 	| LetCall (x, o1, o2, e) -> 
-		LetCall (x, o1, o2, cfold e en)
+		LetCall (x, o1, o2, cfold1 e en)
 	| LetIf (x, o1, e1, e2, e3) -> 
 		(* Don't update en with new pairs added in e1, e2, since these aren't necessarily the values we want *)
-		LetIf (x, o1, cfold e1 en, cfold e2 en, cfold e3 en)
+		LetIf (x, o1, cfold1 e1 en, cfold1 e2 en, cfold1 e3 en)
 
 (* Apply primitive operations in monadic values
  * Returns folded value (to replace original v with) if it is different; returns the value if it is a cons,
@@ -235,7 +238,8 @@ and cfold_val (v: value) (en : var -> value option) : (value option) =
 				| S.Times -> Op (Int (a * b))
 				| S.Div -> Op (Int (a / b))
 				| S.Eq -> Op (Int (if (a == b) then 1 else 0))
-				| S.Lt -> Op (Int (if (a < b) then 1 else 0)))	
+				| S.Lt -> Op (Int (if (a < b) then 1 else 0))
+				| _ -> raise FatalError)	
 			| [Int 1; Var x] | [Var x; Int 1] ->
 				(match s_op with
 				  S.Times -> Some (Op (Var x)) (* Fold 1 * x = x * 1 = x *)
@@ -248,15 +252,17 @@ and cfold_val (v: value) (en : var -> value option) : (value option) =
 			(match l with
 			  [Var x] -> (match en x with
 							(* If found in environment fold the fst/snd *)
-						    Some v -> (match v with
-							            PrimApp (_, l) -> if s_op = S.Fst then fst l else snd l
+						    Some w -> (match w with
+							            PrimApp (S.Cons, l) -> 
+											Some (Op (if s_op = S.Fst then List.hd l
+											else List.hd (List.tl l)))
 									  | _ -> raise FatalError)
 							(* Otherwise do nothing *)
 						  | None -> None)
 			| _ -> raise FatalError))
 	| Lambda (x, e) ->
 		(* Nothing actually happened to en; just defining a function *)
-		Some (Lambda (x, cfold e en))
+		Some (Lambda (x, cfold1 e en))
 
 (* To support a somewhat more efficient form of dead-code elimination and
  * inlining, we first construct a table saying how many times each variable 
@@ -310,6 +316,8 @@ let count_table (e:exp) =
 
 (* dead code elimination *)
 let rec dce (e:exp) : exp =
+	e
+(*
   match e with
   | Return w -> Return w
   | LetVal(x,v,e) ->
@@ -317,15 +325,16 @@ let rec dce (e:exp) : exp =
       (match v with
       | Lambda(y,e) ->
         (match get_calls ct x with
-          | 0 -> LetValue(x,v,dce e)
-          | 1 -> LetValue(y,Op w))
+          | 0 -> LetVal(x,v,dce e)
+          | 1 -> LetVal(y,Op w))
       | _ ->
         if get_uses ct x = 0 then dce e
-        else LetValue(x,v,dce e)
+        else LetVal(x,v,dce e))
   | LetCall(x,f,w,e) ->
       LetCall(x,f,w,dce e)
   | LetIf(x,w,e1,e2,e) ->
       LetIf(x,w,dce e1,dce e2,dce e)
+*)
 
 (* (1) inline functions 
  * (2) reduce LetIf expressions when the value being tested is a constant.
