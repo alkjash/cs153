@@ -174,8 +174,6 @@ let cprop e = cprop_exp empty_env e
 
 (* common sub-value elimination -- as in the slides *)
 let rec cse (e : exp) : exp = 
-	e
-(*
 	cse1 empty_env e
 
 and cse1 (env : value -> var option) (e : exp) : exp =
@@ -183,16 +181,15 @@ and cse1 (env : value -> var option) (e : exp) : exp =
   | Return w -> Return w
   | LetVal(x,v,e) ->
     (match env v with
-      | None -> LetVal(x, cse_val env v,cse1 (extend env x v) e)
-      | Some y -> LetVal(x,Op(Var y),cse1 env e))
-  | LetCall(x,f,w,e) -> LetCall(x,f,w,cse1 env e)
-  | LetIf(x,w,e1,e2,e) ->
-      LetIf(x,w,cse1 env e1,cse1 env e2,cse1 env e)
+      | None -> LetVal(x, cse_val env v, cse1 (extend env v x) e)
+      | Some y -> LetVal(x, Op (Var y), cse1 env e))
+  | LetCall(x, f, w, e) -> LetCall(x, f, w, cse1 env e)
+  | LetIf(x, w, e1, e2, e) ->
+      LetIf(x, w, cse1 env e1, cse1 env e2, cse1 env e)
 and cse_val (env : value -> var option) (v : value) : value =
   match v with
-  | Lambda(x,e) -> Lambda(x,cse1 env e)
+  | Lambda(x, e) -> Lambda(x, cse1 env e)
   | v -> v
-*)
 
 (* constant folding
  * Apply primitive operations which can be evaluated. e.g. fst (1,2) = 1
@@ -272,7 +269,7 @@ and cfold_val (v: value) (en : var -> value option) : (value option) =
  * to (...LetVal(y,Op w,(Let(z,e,e2)))...) when x is used once and 
  * that use is a call site.
  *)
-(* type cnt_table = (var,{uses:int ref,calls:int ref}) Hashtbl.hash_table *)
+(* type cnt_table = (var, {uses:int ref,calls:int ref}) Hashtbl.hash_table *)
 type entry = { uses : int ref; calls: int ref }
 exception NotFound
 let new_cnt_table() = 
@@ -315,18 +312,22 @@ let count_table (e:exp) =
     occ_e e; table
 
 (* dead code elimination *)
-let rec dce (e:exp) : exp =
+let rec dce (e : exp) : exp =
+	(* Compute use/call table exactly once for the entire expression *)
+	let table = count_table e in
+	dce1 e table
+
+and dce1 e ct =
 	e
 (*
   match e with
   | Return w -> Return w
   | LetVal(x,v,e) ->
-      let ct = count_table e in
       (match v with
       | Lambda(y,e) ->
         (match get_calls ct x with
           | 0 -> LetVal(x,v,dce e)
-          | 1 -> LetVal(y,Op w))
+          | 1 -> LetVal(y,Op w, e))
       | _ ->
         if get_uses ct x = 0 then dce e
         else LetVal(x,v,dce e))
