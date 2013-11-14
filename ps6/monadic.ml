@@ -323,7 +323,7 @@ and dce1 e ct =
   | LetVal(x,v,e) ->
       (match v with
       | Lambda _ ->
-        if get_calls ct x = 0 then dce1 e ct
+        if (get_calls ct x = 0) && (get_uses ct x = 0) then dce1 e ct
         else LetVal(x, v, dce1 e ct)
       | _ ->
         if get_uses ct x = 0 then dce1 e ct
@@ -385,7 +385,7 @@ let size_inline_thresh (i : int) (e : exp) : bool = false (* TODO *)
 (* inlining 
  * only inline the expression e if (inline_threshold e) return true.
  *)
-let inline (inline_threshold: exp -> bool) (e:exp) : exp = e (* TODO *)
+let inline (inline_threshold : exp -> bool) (e:exp) : exp = e (* TODO *)
 
 (* reduction of conditions
  * - Optimize conditionals based on contextual information, e.g.
@@ -394,7 +394,21 @@ let inline (inline_threshold: exp -> bool) (e:exp) : exp = e (* TODO *)
  *   (since x < 1 implies x < 2)
  * - This is similar to constant folding + logic programming
  *)
-let redtest (e:exp) : exp = e (* TODO *)
+let rec redtest (e : exp) : exp =
+	match e with
+	  Return _ -> e
+	| LetVal (x, v, e) -> LetVal (x, redtest_val v, redtest e)
+	| LetCall (x, f, w, e) -> LetCall(x, f, w, redtest e)
+	| LetIf (x, w, e1, e2, e3) ->
+		(match w with
+		  Int i -> if i <> 0 then splice x (redtest e1) (redtest e3)
+			else splice x (redtest e2) (redtest e3)
+		| _ -> LetIf (x, w, redtest e1, redtest e2, redtest e3))
+
+and redtest_val (v : value) : value = 
+	match v with
+	  Lambda (x, e) -> Lambda (x, redtest e)
+	| _ -> v
 
 (* optimize the code by repeatedly performing optimization passes until
  * there is no change. *)
