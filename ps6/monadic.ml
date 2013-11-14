@@ -380,7 +380,17 @@ let never_inline_thresh  (e : exp) : bool = false (** Never inline  **)
 (* return true if the expression e is smaller than i, i.e. it has fewer
  * than i constructors
  *)
-let size_inline_thresh (i : int) (e : exp) : bool = false (* TODO *)
+let constructor_counter (n : int) (e : exp) : int =
+  match e with
+  | Return -> n
+  | LetVal(_,_,e) -> constructor_counter n+1 e
+  | LetCall(_,_,_,e) -> constructor_counter n+1 e
+  | LetIf(_,_,w,e1,e2) -> (constructor_counter n+1 e) + (constructor_counter n+1 e1)
+      + (constructor_counter n+1 e2)
+  | _ -> raise FatalError
+
+let size_inline_thresh (i : int) (e : exp) : bool =
+  (constructor_counter 0 e) < i
 
 (* inlining 
  * only inline the expression e if (inline_threshold e) return true.
