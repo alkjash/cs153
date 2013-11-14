@@ -318,24 +318,20 @@ let rec dce (e : exp) : exp =
 	dce1 e table
 
 and dce1 e ct =
-	e
-(*
   match e with
   | Return w -> Return w
   | LetVal(x,v,e) ->
       (match v with
-      | Lambda(y,e) ->
-        (match get_calls ct x with
-          | 0 -> LetVal(x,v,dce e)
-          | 1 -> LetVal(y,Op w, e))
+      | Lambda _ ->
+        if get_calls ct x = 0 then dce1 e ct
+        else LetVal(x, v, dce1 e ct)
       | _ ->
-        if get_uses ct x = 0 then dce e
-        else LetVal(x,v,dce e))
-  | LetCall(x,f,w,e) ->
-      LetCall(x,f,w,dce e)
-  | LetIf(x,w,e1,e2,e) ->
-      LetIf(x,w,dce e1,dce e2,dce e)
-*)
+        if get_uses ct x = 0 then dce1 e ct
+        else LetVal(x,v,dce1 e ct))
+  | LetCall(x, f, w, e) ->
+      LetCall(x, f, w, dce1 e ct)
+  | LetIf(x, w, e1, e2, e) ->
+      LetIf(x, w, dce1 e1 ct, dce1 e2 ct, dce1 e ct)
 
 (* (1) inline functions 
  * (2) reduce LetIf expressions when the value being tested is a constant.
