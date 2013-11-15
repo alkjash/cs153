@@ -182,7 +182,7 @@ and cse1 (env : value -> var option) (e : exp) : exp =
   | LetVal(x,v,e) ->
     (match env v with
       | None -> LetVal(x, cse_val env v, cse1 (extend env v x) e)
-      | Some y -> LetVal(x, Op (Var y), cse1 env e))
+      | Some y -> change (LetVal(x, Op (Var y), cse1 env e)))
   | LetCall(x, f, w, e) -> LetCall(x, f, w, cse1 env e)
   | LetIf(x, w, e1, e2, e) ->
       LetIf(x, w, cse1 env e1, cse1 env e2, cse1 env e)
@@ -230,17 +230,29 @@ and cfold_val (v: value) (en : var -> value option) : (value option) =
 			(match l with
 		  	  [Int a; Int b] -> 
 				Some (match s_op with
-				  S.Plus -> Op (Int (a + b))
-				| S.Minus -> Op (Int (a - b))
-				| S.Times -> Op (Int (a * b))
-				| S.Div -> Op (Int (a / b))
-				| S.Eq -> Op (Int (if (a == b) then 1 else 0))
-				| S.Lt -> Op (Int (if (a < b) then 1 else 0))
+				  S.Plus -> change (Op (Int (a + b)))
+				| S.Minus -> change (Op (Int (a - b)))
+				| S.Times -> change (Op (Int (a * b)))
+				| S.Div -> change (Op (Int (a / b)))
+				| S.Eq -> change (Op (Int (if (a == b) then 1 else 0)))
+				| S.Lt -> change (Op (Int (if (a < b) then 1 else 0)))
 				| _ -> raise FatalError)	
 			| [Int 1; Var x] | [Var x; Int 1] ->
 				(match s_op with
-				  S.Times -> Some (Op (Var x)) (* Fold 1 * x = x * 1 = x *)
+				  S.Times -> change (Some (Op (Var x))) (* Fold 1 * x = x * 1 = x *)
 				| _ -> None)
+			| [Int 0; Var x] | [Var x; Int 0] ->
+				(match s_op with
+				   S.Plus -> change (Some (Op (Var x))) (* Fold 0 + x = x + 0 = x *)
+				 | _ -> None)
+			| [Var x; Int 0] ->
+				(match s_op with
+				   S.Minus -> change (Some (Op (Var x))) (* Fold x - 0 = x *)
+				 | _ -> None)
+			| [Var x; Int 1] ->
+				(match s_op with
+				   S.Div -> change (Some (Op (Var x))) (* Fold x / 1 = x *)
+				 | _ -> None)
 			| _ -> None)
 		(* When v is a cons, return it to be added to env for future folding of pairs *)
 		| S.Cons -> Some v
@@ -251,8 +263,8 @@ and cfold_val (v: value) (en : var -> value option) : (value option) =
 							(* If found in environment fold the fst/snd *)
 						    Some w -> (match w with
 							            PrimApp (S.Cons, l) -> 
-											Some (Op (if s_op = S.Fst then List.hd l
-											else List.hd (List.tl l)))
+											change (Some (Op (if s_op = S.Fst then List.hd l
+											else List.hd (List.tl l))))
 									  | _ -> raise FatalError)
 							(* Otherwise do nothing *)
 						  | None -> None)
@@ -323,10 +335,10 @@ and dce1 e ct =
   | LetVal(x,v,e) ->
       (match v with
       | Lambda _ ->
-        if (get_calls ct x = 0) && (get_uses ct x = 0) then dce1 e ct
+        if (get_calls ct x = 0) && (get_uses ct x = 0) then change (dce1 e ct)
         else LetVal(x, v, dce1 e ct)
       | _ ->
-        if get_uses ct x = 0 then dce1 e ct
+        if get_uses ct x = 0 then change (dce1 e ct)
         else LetVal(x,v,dce1 e ct))
   | LetCall(x, f, w, e) ->
       LetCall(x, f, w, dce1 e ct)
@@ -421,6 +433,7 @@ and inline_e it e name fcn =
       LetIf(v,op,inline_e it e name fcn,inline_e it e1 name fcn,
         inline_e it e2 name fcn)
 
+
 (* reduction of conditions
  * - Optimize conditionals based on contextual information, e.g.
  *   if (x < 1) then if (x < 2) then X else Y else Z =-> 
@@ -428,20 +441,77 @@ and inline_e it e name fcn =
  *   (since x < 1 implies x < 2)
  * - This is similar to constant folding + logic programming
  *)
+
+(* Helper function that decides if two monadic expressions are identical
+   Doesn't do very much: just checks if they are identical up to some arithmetic order
+   and the variables defined internally are defined in the same way;
+   keeps an environment which maps new variables of e1 to new variables of e2 if and only
+   if they are the same *)
+
+let rec mon_eq (en : var -> var) (e1 : exp) (e2 : exp) : bool =
+	(* Two variables are the same if they are actually the same or 
+	if they are defined identically *)
+	let eq x y = (x = y || en x = y) in
+	(* Ignore the match cases where we apply the same function to same ints or
+	If with w1 = w2 are ints - these get folded out by other optimizations *)
+	match (e1, e2) with
+	  (Return x1, Return x2) -> (x1 = x2 || en x1 = Some e2)
+	| (LetVal (x1, v1, e1'), LetVal (x2, v2, e2')) ->
+		(mon_val_eq en v1 v2) && (mon_eq (extend en x1 x2) e1' e2')
+	| (LetCall (x1, Var f1, Var w1, e1'), LetCall (x2, Var f2, Var w2, e2')) ->
+		(eq f1 f2) && (eq w1 w2) && (mon_eq (extend en x1 x2) e1' e2')
+	| (LetIf (x1, Var w1, e11, e12, e13), LetIf (x2, Var w2, e21, e22, e23)) ->
+		(eq x1 x2) && (eq w1 w2) && (mon_eq en e11 e21) && (mon_eq en e12 e22) &&
+		(mon_eq (extend en x1 x2) e13 e23)
+	| _ -> false
+
+and mon_val_eq (en : var -> var) (v1 : value) (v2 : value) : bool =
+	let eq x y = match (x, y) with
+	  (Int a, Int b) -> a = b
+	| (Var x1, Var y1) -> (x1 = y1 || en x1 = y1) in
+	match (v1, v2) with
+	| (Op x1, Op x2) -> eq x1 x2
+	| (PrimApp (o1, l1), PrimApp (o2, l2)) ->
+		(o1 = o2) && (match o1 with
+		  S.Plus | S.Times | S.Eq -> (* Commutative *)
+			(match (l1, l2) with
+			   ([a1; b1], [a2; b2]) ->
+					((eq a1 a2) && (eq b1 b2)) || ((eq a1 b2) && (eq b1 a2))
+			 | _ -> false)
+		| S.Minus | S.Div | S.Cons | S.Lt -> (* Noncommutative *)
+			(match (l1, l2) with
+			   ([a1; b1], [a2; b2]) ->
+					((eq a1 a2) && (eq b1 b2))
+			 | _ -> false)
+		| S.Fst | S.Snd -> (* Single Argument *)
+			(match (l1, l2) with
+			   ([a1], [a2]) ->
+					(eq a1 a2)
+			 | _ -> false))
+	| (Lambda (x1, e1), Lambda (x2, e2)) -> mon_eq (extend en x1 x2) e1 e2
+	| _ -> false
+
 let rec redtest (e : exp) : exp =
+	redtest1 e
+
+and redtest1 (e : exp) : exp =
 	match e with
 	  Return _ -> e
-	| LetVal (x, v, e) -> LetVal (x, redtest_val v, redtest e)
-	| LetCall (x, f, w, e) -> LetCall(x, f, w, redtest e)
+	| LetVal (x, v, e) -> LetVal (x, redtest_val v, redtest1 en e)
+	| LetCall (x, f, w, e) -> LetCall(x, f, w, redtest1 en e)
 	| LetIf (x, w, e1, e2, e3) ->
-		(match w with
-		  Int i -> if i <> 0 then splice x (redtest e1) (redtest e3)
-			else splice x (redtest e2) (redtest e3)
-		| _ -> LetIf (x, w, redtest e1, redtest e2, redtest e3))
+		(* If e1 and e2 are identical then skip the checking w and just letval one of them *)
+		if mon_eq empty_env e1 e2 then change (splice x e1 e3)
+		else
+		((* Check if w is a constant; if so forget about doing the if *)
+		match w with
+		  Int i -> if i <> 0 then change (splice x (redtest1 en e1) (redtest1 en e3))
+			else change (splice x (redtest1 en e2) (redtest1 en e3))
+		| _ -> LetIf (x, w, redtest1 e1, redtest1 e2, redtest1 e3))
 
 and redtest_val (v : value) : value = 
 	match v with
-	  Lambda (x, e) -> Lambda (x, redtest e)
+	  Lambda (x, e) -> Lambda (x, redtest1 e)
 	| _ -> v
 
 (* optimize the code by repeatedly performing optimization passes until
