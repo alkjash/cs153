@@ -237,21 +237,23 @@ and cfold_val (v: value) (en : var -> value option) : (value option) =
 				| S.Eq -> change (Op (Int (if (a == b) then 1 else 0)))
 				| S.Lt -> change (Op (Int (if (a < b) then 1 else 0)))
 				| _ -> raise FatalError)	
-			| [Int 1; Var x] | [Var x; Int 1] ->
+			| [Int 1; Var x] ->
 				(match s_op with
-				  S.Times -> change (Some (Op (Var x))) (* Fold 1 * x = x * 1 = x *)
+				  S.Times -> change (Some (Op (Var x)))  (* Fold 1 * x = x *)
 				| _ -> None)
-			| [Int 0; Var x] | [Var x; Int 0] ->
+			| [Int 0; Var x] ->
 				(match s_op with
-				   S.Plus -> change (Some (Op (Var x))) (* Fold 0 + x = x + 0 = x *)
+				   S.Plus -> change (Some (Op (Var x)))  (* Fold 0 + x = x *)
 				 | _ -> None)
 			| [Var x; Int 0] ->
 				(match s_op with
 				   S.Minus -> change (Some (Op (Var x))) (* Fold x - 0 = x *)
+				 | S.Plus -> change (Some (Op (Var x)))  (* Fold x + 0 = x *)
 				 | _ -> None)
 			| [Var x; Int 1] ->
 				(match s_op with
-				   S.Div -> change (Some (Op (Var x))) (* Fold x / 1 = x *)
+				   S.Div -> change (Some (Op (Var x)))   (* Fold x / 1 = x *)
+				 | S.Times -> change (Some (Op (Var x))) (* Fold x * 1 = x *)
 				 | _ -> None)
 			| _ -> None)
 		(* When v is a cons, return it to be added to env for future folding of pairs *)
@@ -334,9 +336,9 @@ and dce1 e ct =
   | Return w -> Return w
   | LetVal(x,v,e) ->
       (match v with
-      | Lambda _ ->
+      | Lambda (x1, e1) ->
         if (get_calls ct x = 0) && (get_uses ct x = 0) then change (dce1 e ct)
-        else LetVal(x, v, dce1 e ct)
+        else LetVal(x, Lambda (x1, dce1 e1 ct), dce1 e ct)
       | _ ->
         if get_uses ct x = 0 then change (dce1 e ct)
         else LetVal(x,v,dce1 e ct))
@@ -394,43 +396,58 @@ let never_inline_thresh  (e : exp) : bool = false (** Never inline  **)
  *)
 let rec constructor_counter (n : int) (e : exp) : int =
   match e with
-  | Return op -> n
-  | LetVal(_,_,e) -> constructor_counter (n+1) e
-  | LetCall(_,_,_,e) -> constructor_counter (n+1) e
-  | LetIf(_,_,w,e1,e2) -> (constructor_counter (n+1) e) + (constructor_counter (n+1) e1)
-      + (constructor_counter (n+1) e2)
+  | Return op -> n + 1
+  | LetVal(_, v, e) -> constructor_counter (n + 2 + (cc_val v)) e
+  | LetCall(_, _, _, e) -> constructor_counter (n + 4) e
+  | LetIf(_, _, e1, e2, e) -> (constructor_counter (n + 3) e) + (constructor_counter 0 e1)
+      + (constructor_counter 0 e2)
+
+and cc_val (v : value) : int =
+	match v with
+	  Op _ -> 1
+	| Lambda (_, e) ->
+		2 + (constructor_counter 0 e)
+	| PrimApp (_, l) ->
+		1 + (List.length l)
 
 let size_inline_thresh (i : int) (e : exp) : bool =
   (constructor_counter 0 e) < i
 
 (* inlining 
- * only inline the expression e if (inline_threshold e) return true.
+ * only inline the expression e if (inline_threshold e) return true
+ * or if the function only called once
  *)
 let rec inline (inline_threshold: exp -> bool) (e:exp) : exp =
   (* if (inline_threshold e) then *)
-  inline_e inline_threshold e (Var "") (Op (Var ""))
+  let table = count_table e in
+  inline_e inline_threshold e (Var "") table (Op (Var ""))
   (* let table = count_table e in
   inline_e e table "" *)
 
-and inline_e it e name fcn =
+and inline_e it e name t fcn =
+  let ie e n fcn = inline_e it e n t fcn in
   match e with
   | Return _ -> e
-  | LetVal (f,Lambda(x,e1),e2) ->
-      let t = count_table e2 in
+  | LetVal (f, Lambda(x, e1), e2) ->
+	  (* Regardless: inline internally to the function *)
+	  let e1 = ie e1 name fcn in
+	  (* If called at most once or below threshold, inline *)
       if get_calls t f = 1 || it e1 then
-        LetVal(f,Lambda(x,e1),inline_e it e2 (Var f) (Lambda(x,e1)))
-      else LetVal(f,Lambda(x,e1),inline_e it e2 name fcn)
-  | LetVal (x,v,e) ->
-      LetVal(x,v,inline_e it e name fcn)
-  | LetCall (y,f,w,e2) ->
+		(let e2 = ie e2 name fcn in
+        LetVal(f, Lambda(x, e1), ie e2 (Var f) (Lambda(x, e1))))
+      else LetVal(f, Lambda(x, e1), ie e2 name fcn)
+  | LetVal (x, v, e) ->
+      LetVal(x, v, ie e name fcn)
+  | LetCall (y, f, w, e2) ->
       if name = f then 
-        let Lambda(x,e1) = fcn in
-        splice y (LetVal(x,Op w,e1)) e2
+        (match fcn with 
+		   Lambda(x, e1) ->
+        		change (splice y (LetVal(x, Op w, e1)) (ie e2 name fcn))
+		 | _ -> raise FatalError)
       else
-        LetCall(y,f,w,inline_e it e2 name fcn)
-  | LetIf(v,op,e,e1,e2) ->
-      LetIf(v,op,inline_e it e name fcn,inline_e it e1 name fcn,
-        inline_e it e2 name fcn)
+        LetCall(y, f, w, ie e2 name fcn)
+  | LetIf(v, op, e, e1, e2) ->
+      LetIf(v, op, ie e name fcn, ie e1 name fcn, ie e2 name fcn)
 
 
 (* reduction of conditions
@@ -447,14 +464,15 @@ and inline_e it e name fcn =
    keeps an environment which maps new variables of e1 to new variables of e2 if and only
    if they are the same *)
 
-let rec mon_eq (en : var -> var) (e1 : exp) (e2 : exp) : bool =
+let rec mon_eq (en : var -> var option) (e1 : exp) (e2 : exp) : bool =
 	(* Two variables are the same if they are actually the same or 
 	if they are defined identically *)
-	let eq x y = (x = y || en x = y) in
+	let eq x y = (x = y || en x = Some y) in
 	(* Ignore the match cases where we apply the same function to same ints or
 	If with w1 = w2 are ints - these get folded out by other optimizations *)
 	match (e1, e2) with
-	  (Return x1, Return x2) -> (x1 = x2 || en x1 = Some e2)
+	  (Return (Int x1), Return (Int x2)) -> (x1 = x2)
+	| (Return (Var x1), Return (Var x2)) -> (eq x1 x2)
 	| (LetVal (x1, v1, e1'), LetVal (x2, v2, e2')) ->
 		(mon_val_eq en v1 v2) && (mon_eq (extend en x1 x2) e1' e2')
 	| (LetCall (x1, Var f1, Var w1, e1'), LetCall (x2, Var f2, Var w2, e2')) ->
@@ -464,10 +482,11 @@ let rec mon_eq (en : var -> var) (e1 : exp) (e2 : exp) : bool =
 		(mon_eq (extend en x1 x2) e13 e23)
 	| _ -> false
 
-and mon_val_eq (en : var -> var) (v1 : value) (v2 : value) : bool =
+and mon_val_eq (en : var -> var option) (v1 : value) (v2 : value) : bool =
 	let eq x y = match (x, y) with
 	  (Int a, Int b) -> a = b
-	| (Var x1, Var y1) -> (x1 = y1 || en x1 = y1) in
+	| (Var x1, Var y1) -> (x1 = y1 || en x1 = Some y1) 
+	| _ -> false in
 	match (v1, v2) with
 	| (Op x1, Op x2) -> eq x1 x2
 	| (PrimApp (o1, l1), PrimApp (o2, l2)) ->
@@ -496,16 +515,16 @@ let rec redtest (e : exp) : exp =
 and redtest1 (e : exp) : exp =
 	match e with
 	  Return _ -> e
-	| LetVal (x, v, e) -> LetVal (x, redtest_val v, redtest1 en e)
-	| LetCall (x, f, w, e) -> LetCall(x, f, w, redtest1 en e)
+	| LetVal (x, v, e) -> LetVal (x, redtest_val v, redtest1 e)
+	| LetCall (x, f, w, e) -> LetCall(x, f, w, redtest1 e)
 	| LetIf (x, w, e1, e2, e3) ->
 		(* If e1 and e2 are identical then skip the checking w and just letval one of them *)
-		if mon_eq empty_env e1 e2 then change (splice x e1 e3)
+		if mon_eq empty_env e1 e2 then change (splice x (redtest1 e1) (redtest1 e3))
 		else
 		((* Check if w is a constant; if so forget about doing the if *)
 		match w with
-		  Int i -> if i <> 0 then change (splice x (redtest1 en e1) (redtest1 en e3))
-			else change (splice x (redtest1 en e2) (redtest1 en e3))
+		  Int i -> if i <> 0 then change (splice x (redtest1 e1) (redtest1 e3))
+			else change (splice x (redtest1 e2) (redtest1 e3))
 		| _ -> LetIf (x, w, redtest1 e1, redtest1 e2, redtest1 e3))
 
 and redtest_val (v : value) : value = 
