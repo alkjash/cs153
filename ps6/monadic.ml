@@ -395,7 +395,6 @@ let size_inline_thresh (i : int) (e : exp) : bool =
 (* inlining 
  * only inline the expression e if (inline_threshold e) return true.
  *)
-<<<<<<< HEAD
 let rec inline (inline_threshold: exp -> bool) (e:exp) : exp =
   (* if (inline_threshold e) then *)
   inline_e inline_threshold e "" Op("")
@@ -422,9 +421,6 @@ and inline_e it e name fcn =
         match e with
         | Return b -> e1 (* test e for true/false? *)
   else e
-=======
-let inline (inline_threshold : exp -> bool) (e:exp) : exp = e (* TODO *)
->>>>>>> 5b64fe708cd23834333334b7286834ad1f10bd7b
 
 (* reduction of conditions
  * - Optimize conditionals based on contextual information, e.g.
