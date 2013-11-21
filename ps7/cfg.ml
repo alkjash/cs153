@@ -8,15 +8,41 @@ exception FatalError
 
 (* an interference graph maps a variable x to the set of variables that
  * y such that x and y are live at the same point in time.  It's up to
- * you how you want to represent the graph.  I've just put in a dummy
- * definition for now.  *)
-type interfere_graph = unit
+ * you how you want to represent the graph.  
+ * Implemented as a function which maps x to the list of variables 
+ * live at some same point with it  *)
+type interfere_graph = var -> var list
+
+(* Representation of pred and succ relations between blocks *)
+type block_graph = block -> block list 
+let extend_bg g b1 b2 =
+	if List.mem b2 (g b1) then g 
+	else (fun b -> if b = b1 then b2 :: (g b1) else g b)
+let empty_bg b = []
+
+(* For each block, calculate all its predecessor and successor blocks *)
+let calc_block_graph (f : func) : (block_graph * block_graph) =
+	let pred = empty_bg in
+	let succ = empty_bg in
+	raise Implement_Me
+
+(* general type for storing LiveIn and LiveOut - takes as input
+ * block and inst index within that block and outputs a list of vars *)
+type env = block -> int -> var list
+let extend_env e b i x =
+	raise Implement_Me
+let empty_env b i = []
 
 (* given a function (i.e., list of basic blocks), construct the
  * interference graph for that function.  This will require that
  * you build a dataflow analysis for calculating what set of variables
  * are live-in and live-out for each program point. *)
 let build_interfere_graph (f : func) : interfere_graph =
+	(* Construct graph of pred's and succ's between blocks *)
+	let (pred, succ) = calc_block_graph f in
+	(* Calculate Live-In and Live-Out sets of each program instruction recursively *)
+	(* Calculate Interference Graph by running through instructions and adding all
+	   common live-in variables *)
     raise Implement_Me
 
 (* given an interference graph, generate a string representing it *)
