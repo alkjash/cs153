@@ -64,14 +64,49 @@ let extend_env e b i x =
 	(b,i,x) :: e
 let empty_env b i = []
 
-let calc_vars_b insts gen kill b i : (env * env) =
-  match insts with
-  | h::t -> (extend_env gen b i+1 (get_vars h), extend_env kill b i+1 (get_vars h))
-
-let get_vars ins : var list =
+let get_vars_gen ins : var list =
   match ins with
   | Label l -> []
-  | Move (x,y) -> (extend_env gen 
+  | Move (x,y) ->
+    match x,y with
+    | (Var a,Var b) -> [a;b]
+    | (Var a,_) -> [a]
+    | _ -> []
+  | Arith (x,y,_,z)->
+    match x,y,z with
+    | (Var a,Var b,Var c) -> [a;b;c]
+    | (Var a,Var b,_) -> [a;b]
+    | (Var a,_,Var c) -> [a;c]
+    | (Var a,_,_) -> [a]
+    | _ -> []
+  | Load _ -> []
+  | Store _ -> []
+  | Call _ -> []
+  | Jump _ -> []
+  | Return -> []
+
+let get_vars_kill ins : var list =
+  match ins with
+  | Label l -> []
+  | Move (x,y) -> [x]
+  | Arith (x,y,_,z)->
+    match x,y,z with
+    | (Var a,Var b,Var c) -> [a;b;c]
+    | (Var a,Var b,_) -> [a;b]
+    | (Var a,_,Var c) -> [a;c]
+    | (Var a,_,_) -> [a]
+    | _ -> []
+  | Load x -> [x]
+  | Store _ -> []
+  | Call x -> [x]
+  | Jump _ -> []
+  | Return -> []
+
+let calc_vars_b insts gen kill b i : (env * env) =
+  match insts with
+  | h::t -> calc_vars_b t (extend_env gen b i (get_vars_gen h)) (extend_env kill b i (get_vars_kill h)) b i+1
+  | _ -> (gen,kill)
+
 
 (* given a function (i.e., list of basic blocks), construct the
  * interference graph for that function.  This will require that
