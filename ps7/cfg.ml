@@ -98,10 +98,19 @@ let get_vars_kill (ins : inst) : VS.t =
   | _ -> VS.empty
 
 (* Recurse through a block and update gen and kill for this block *)
-let rec calc_vars_b insts gen kill b i : (env * env) =
+let rec calc_vars_b insts gen kill i b : (env * env) =
   match insts with
-  | h::t -> calc_vars_b t (update_env gen b i (get_vars_gen h)) (update_env kill b i (get_vars_kill h)) b (i+1)
+  | h::t -> calc_vars_b t (update_env gen i b (get_vars_gen h)) (update_env kill i b (get_vars_kill h)) (i+1) b
   | _ -> (gen,kill)
+
+let rec calc_gen_kill (f : func) (e2 : (env * env)) : (env * env) =
+  match f with
+  | h::t -> 
+    let gen,kill = e2 in
+    calc_gen_kill t (calc_vars_b h gen kill 0 h)
+  | [] -> e2
+  | _ -> raise FatalError
+
 
 (* Do one iteration of propagating Live-out sets of each instruction backwards;
    if at beginning of a block, propagate to all predecessors *)
@@ -137,7 +146,7 @@ let build_interfere_graph (f : func) : interfere_graph =
 	(* Construct graph of pred's and succ's between blocks *)
 	let pred = calc_block_graph f in
 	(* Calculate Gen's and kills of each instruction *)
-	let (gen, kill) = raise Implement_Me in
+	let (gen, kill) = calc_gen_kill f (empty_env,empty_env) in
 	(* Calculate Live-In and Live-Out sets of each program instruction recursively *)
 	let rec liveloop li lo =
 		let (newli, newlo) = calc_live li lo gen kill pred in
