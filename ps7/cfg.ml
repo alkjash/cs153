@@ -69,7 +69,7 @@ let calc_out (pred : block_graph) (b : block) : block_graph =
 	match tail b with
 	  Jump l -> extend_bg pred (ltb l) b
 	| If (_, _, _, l1, l2) -> extend_bg (extend_bg pred (ltb l1) b) (ltb l2) b
-	| Return _ -> pred
+	| Return -> pred
 	| _ -> raise FatalError
 
 (* For each block, calculate all its predecessor blocks *)
@@ -162,7 +162,7 @@ let build_interfere_graph (f : func) : interfere_graph =
 
 	(* Calculate Gen's and kills of each instruction *)
 	let (gen, kill) = calc_gen_kill f (empty_env,empty_env) in
-  
+
 	(* Calculate Live-In and Live-Out sets of each program instruction recursively *)
 	let rec liveloop li lo =
 		let (newli, newlo) = calc_live li lo gen kill pred in
@@ -176,7 +176,7 @@ let build_interfere_graph (f : func) : interfere_graph =
 	let add_interfere ig b i = 
 		let vs = lo b i in
 		(* Fold over all pairs of distinct x, y: insert (x -- y) into ig *)	
-		VS.fold (fun x ig -> (VS.fold (fun y ig -> if x <> y then extend_ig ig x y) vs ig) vs ig in
+		VS.fold (fun x ig -> (VS.fold (fun y ig -> if x <> y then extend_ig ig x y) vs ig) vs ig) in
 	(* Iterate over a block *)
 	let add_interfere_block ig b =
 		let rec h ig b i =
