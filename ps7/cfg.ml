@@ -12,6 +12,10 @@ exception FatalError
  * Implemented as a function which maps x to the list of variables 
  * live at some same point with it  *)
 type interfere_graph = var -> var list
+let extend_ig ig x y =
+	if List.mem y (ig x) then ig
+	else (fun z -> if z = x then y :: (ig x) else ig z)
+let empty_ig x = []
 
 (* Make whole fnc global for easy lookup *)
 let fnc = ref []
@@ -50,18 +54,17 @@ let calc_out (pred : block_graph) (b : block) : block_graph =
 	| Return _ -> pred
 	| _ -> raise FatalError
 
-(* For each block, calculate all its predecessor and successor blocks *)
-let calc_block_graph (f : func) : (block_graph * block_graph) =
-	let pred = empty_bg in
-	let pred = List.fold_left calc_out pred f in
-	let succ = empty_bg in
-	(pred, succ)
+(* For each block, calculate all its predecessor blocks *)
+let calc_block_graph (f : func) : block_graph =
+	List.fold_left calc_out empty_bg f
 
-(* general type for storing LiveIn and LiveOut - takes as input
+(* general type for storing list of vars associated with instructions - takes as input
  * block and inst index within that block and outputs a list of vars *)
 type env = block -> int -> var list
 let extend_env e b i x =
-	(b,i,x) :: e
+	let l = e b i in
+	if List.mem x l then e
+	else (fun b' i' -> if (b' = b && i' = i) then x :: (e b i) else e b' i') 
 let empty_env b i = []
 
 let get_vars_gen ins : var list =
@@ -108,6 +111,11 @@ let calc_vars_b insts gen kill b i : (env * env) =
   | _ -> (gen,kill)
 
 
+(* Do one iteration of propagating Live-out sets of each instruction backwards;
+   if at beginning of a block, propagate to all predecessors *)
+let calc_live (livein : env) (liveout : env) : (env * env) =
+	raise Implement_Me
+
 (* given a function (i.e., list of basic blocks), construct the
  * interference graph for that function.  This will require that
  * you build a dataflow analysis for calculating what set of variables
@@ -116,11 +124,23 @@ let build_interfere_graph (f : func) : interfere_graph =
 	(* Update fnc to f; used globally throughout rest of calculation *)
 	let _ = (fnc := f) in
 	(* Construct graph of pred's and succ's between blocks *)
-	let (pred, succ) = calc_block_graph f in
+	let pred = calc_block_graph f in
+	(* Calculate Gen's and kills of each instruction *)
+	let (gen, kill) = raise Implement_Me in
 	(* Calculate Live-In and Live-Out sets of each program instruction recursively *)
+	let rec liveloop li lo =
+		let newli, newlo = calc_live li lo in
+		if (newli, newlo) = (li, lo) then li lo
+		else liveloop newli newlo in
+	let livein liveout = liveloop gen empty_env
 	(* Calculate Interference Graph by running through instructions and adding all
 	   common live-in variables *)
-    raise Implement_Me
+	let add_interfere ig b i = 
+	(* Take all pairs of vars in liveout b i and add them to ig *)
+    raise Implement_Me in
+	let rec add_interfere_block ig b =
+	raise Implement_Me in
+	List.fold_left add_interfere_block empty_ig f
 
 (* given an interference graph, generate a string representing it *)
 let str_of_interfere_graph (g : interfere_graph) : string =
