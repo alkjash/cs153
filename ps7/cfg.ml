@@ -51,7 +51,7 @@ let calc_out (pred : block_graph) (b : block) : block_graph =
 	match tail b with
 	  Jump l -> extend_bg pred (ltb l) b
 	| If (_, _, _, l1, l2) -> extend_bg (extend_bg pred (ltb l1) b) (ltb l2) b
-	| Return _ -> pred
+	|inl Return _ -> pred
 	| _ -> raise FatalError
 
 (* For each block, calculate all its predecessor blocks *)
@@ -65,6 +65,8 @@ let extend_env e b i x =
 	let l = e b i in
 	if List.mem x l then e
 	else (fun b' i' -> if (b' = b && i' = i) then x :: (e b i) else e b' i') 
+let update_env e b i l =
+	fun b' i' -> if (b' = b && i' = i) then l else e b' i'
 let empty_env b i = []
 
 let get_vars_gen ins : var list =
@@ -113,8 +115,37 @@ let calc_vars_b insts gen kill b i : (env * env) =
 
 (* Do one iteration of propagating Live-out sets of each instruction backwards;
    if at beginning of a block, propagate to all predecessors *)
-let calc_live (livein : env) (liveout : env) : (env * env) =
-	raise Implement_Me
+let calc_live (livein : env) (liveout : env) (gen : env) (kill : env) (pred : block_graph) 
+				: (env * env) =
+	(* Reverse the instructions in each block so we can just propagate liveness 
+	   forwards instead of back *)
+	let f = (List.map List.rev !fnc) in
+	(* Within each block, propagate livein through the reversed list *)
+	let rec cl_block (li, lo) b i =
+		match b with
+		  [] -> (li, lo)
+		| [h] -> (* Propagate to all pred blocks *)
+			raise Implement_Me
+		| h1::h2::t ->
+			let out = li b i in
+			if out = lo b (i-1) then (li, lo)
+			else 
+				let lo = update_env lo b (i-1) out in
+				let li = 
+			
+	List.fold_left cl_block (li, lo) f
+
+
+(* Initialize LiveIn[L] := Gen[L].
+initialize LiveOut[L] := { }.
+loop until no change {
+for each L:
+Out := LiveIn[L 1 ] ∪ ... ∪ LiveIn[L n ]
+where succ[L] = {L 1 ,...,L n }
+if Out == LiveOut[L] then continue to next block.
+LiveOut[L] := Out.
+LiveIn[L] := Gen[L] ∪ (LiveOut[L] - Kill[L]).
+} *)	
 
 (* given a function (i.e., list of basic blocks), construct the
  * interference graph for that function.  This will require that
@@ -129,7 +160,7 @@ let build_interfere_graph (f : func) : interfere_graph =
 	let (gen, kill) = raise Implement_Me in
 	(* Calculate Live-In and Live-Out sets of each program instruction recursively *)
 	let rec liveloop li lo =
-		let newli, newlo = calc_live li lo in
+		let newli, newlo = calc_live li lo gen kill in
 		if (newli, newlo) = (li, lo) then li lo
 		else liveloop newli newlo in
 	let livein liveout = liveloop gen empty_env
