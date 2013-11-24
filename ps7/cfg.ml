@@ -74,15 +74,13 @@ let get_vars_gen ins : var list =
   | Label l -> []
   | Move (x,y) ->
     match x,y with
-    | (Var a,Var b) -> [a;b]
-    | (Var a,_) -> [a]
+    | (_,Var b) -> [b]
     | _ -> []
   | Arith (x,y,_,z)->
     match x,y,z with
-    | (Var a,Var b,Var c) -> [a;b;c]
-    | (Var a,Var b,_) -> [a;b]
-    | (Var a,_,Var c) -> [a;c]
-    | (Var a,_,_) -> [a]
+    | (_,Var b,Var c) -> [b;c]
+    | (_,Var b,_) -> [b]
+    | (_,_,Var c) -> [c]
     | _ -> []
   | Load _ -> []
   | Store _ -> []
@@ -93,12 +91,9 @@ let get_vars_gen ins : var list =
 let get_vars_kill ins : var list =
   match ins with
   | Label l -> []
-  | Move (x,y) -> [x]
+  | Move (x,_) -> [x]
   | Arith (x,y,_,z)->
     match x,y,z with
-    | (Var a,Var b,Var c) -> [a;b;c]
-    | (Var a,Var b,_) -> [a;b]
-    | (Var a,_,Var c) -> [a;c]
     | (Var a,_,_) -> [a]
     | _ -> []
   | Load x -> [x]
