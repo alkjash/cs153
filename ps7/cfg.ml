@@ -75,42 +75,28 @@ let empty_env b i = VS.empty
 
 let get_vars_gen (ins : inst) : VS.t =
   match ins with
-  | Label l -> VS.empty
-  | Move (x,y) ->
-    (match x,y with
-    | (_,Var b) -> VS.singleton b
-    | _ -> VS.empty) 
-  | Arith (x,y,_,z)->
-    (match x,y,z with
-    | (_,Var b,Var c) -> VS.add b (VS.singleton c)
-    | (_,Var b,_) -> VS.singleton b
-    | (_,_,Var c) -> VS.singleton c
-    | _ -> VS.empty)
-  | Load _ -> VS.empty
-  | Store _ -> VS.empty
-  | Call _ -> VS.empty
-  | Jump _ -> VS.empty 
-  | Return -> VS.empty
+  | Move (_, Var x) | Load (_, Var x, _) | Call (Var x) ->
+	VS.singleton x
+  | Arith (_, x, _, y) | Store (x, _, y) | If (x, _, y, _, _) ->
+	(match x, y with
+	  (Var a, Var b) -> VS.add b (VS.singleton a)
+	| (_, Var b) -> VS.singleton b
+	| (Var a, _) -> VS.singleton a
+	| _ -> VS.empty)
+  | _ -> VS.empty
 
 let get_vars_kill (ins : inst) : VS.t =
   match ins with
-  | Label l -> VS.empty
-  | Move (x,_) -> VS.singleton x
-  | Arith (x,y,_,z)->
-    (match x,y,z with
-    | (Var a,_,_) -> VS.singleton a
-    | _ -> VS.empty)
-  | Load x -> VS.singleton x
-  | Store _ -> VS.empty
-  | Call x -> VS.singleton x
-  | Jump _ -> VS.empty
-  | Return -> VS.empty
+  | Move (Var x, _) -> VS.singleton x
+  | Arith (Var x,_,_,_)-> VS.singleton x
+  | Load (Var x, _, _) -> VS.singleton x
+  | _ -> VS.empty
 
-let calc_vars_b insts gen kill b i : (env * env) =
+let rec calc_vars_b insts gen kill b i : (env * env) =
   match insts with
-  | h::t -> calc_vars_b t (extend_env gen b i (get_vars_gen h)) (extend_env kill b i (get_vars_kill h)) b i+1
+  | h::t -> calc_vars_b t (update_env gen b i (get_vars_gen h)) (update_env kill b i (get_vars_kill h)) b (i+1)
   | _ -> (gen,kill)
-(*
+
 (* Do one iteration of propagating Live-out sets of each instruction backwards;
    if at beginning of a block, propagate to all predecessors *)
 let calc_live (livein : env) (liveout : env) (gen : env) (kill : env) (pred : block_graph) 
@@ -129,20 +115,8 @@ let calc_live (livein : env) (liveout : env) (gen : env) (kill : env) (pred : bl
 			if out = lo b (i-1) then (li, lo)
 			else 
 				let lo = update_env lo b (i-1) out in
-				let li = raise Implement_Me in
-	List.fold_left (fun (li, lo) b -> cl_block (li, lo) b (List.length b)) (li, lo) f
-*)
-
-(* Initialize LiveIn[L] := Gen[L].
-initialize LiveOut[L] := { }.
-loop until no change {
-for each L:
-Out := LiveIn[L 1 ] ∪ ... ∪ LiveIn[L n ]
-where succ[L] = {L 1 ,...,L n }
-if Out == LiveOut[L] then continue to next block.
-LiveOut[L] := Out.
-LiveIn[L] := Gen[L] ∪ (LiveOut[L] - Kill[L]).
-} *)	
+				let li = raise Implement_Me in (li, lo) in
+	List.fold_left (fun (li, lo) b -> cl_block (li, lo) b (List.length b)) (livein, liveout) f
 
 (* given a function (i.e., list of basic blocks), construct the
  * interference graph for that function.  This will require that
@@ -157,8 +131,8 @@ let build_interfere_graph (f : func) : interfere_graph =
 	let (gen, kill) = raise Implement_Me in
 	(* Calculate Live-In and Live-Out sets of each program instruction recursively *)
 	let rec liveloop li lo =
-		let newli, newlo = calc_live li lo gen kill in
-		if (newli, newlo) = (li, lo) then li lo
+		let (newli, newlo) = calc_live li lo gen kill pred in
+		if (newli, newlo) = (li, lo) then (li, lo)
 		else liveloop newli newlo in
 	let livein liveout = liveloop gen empty_env in
 	(* Calculate Interference Graph by running through instructions and adding all
