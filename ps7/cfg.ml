@@ -110,20 +110,33 @@ let calc_live (livein : env) (liveout : env) (gen : env) (kill : env) (pred : bl
 	(* Reverse the instructions in each block so we can just propagate liveness 
 	   forwards instead of back *)
 	let f = (List.map List.rev !fnc) in
+
+	(* Helper to propagate current livein of a given b, i to a pred instruction b', i' *)
+	let prop li lo b i b' i' =
+		let newlo = VS.union (lo b' i') (li b i) in
+		if VS.equal newlo (lo b' i') then (* Do nothing, no change *)
+			(li, lo)
+		else (* Update lo and update li in accordance to that, taking into account gen's and kill's *)
+			let lo = update_env lo b' i' newlo in
+			let k = kill b' i' in
+			let newli = VS.union (gen b' i') (VS.filter (fun e -> !(VS.mem e k)) newlo) in
+			let li = update_env li b' i' newli in
+			(li, lo) in
+
 	(* Within each block, propagate livein through the reversed list *)
-	let rec cl_block (li, lo) b i =
-		match b with
-		  [] -> (li, lo)
-		| [h] -> (* Propagate to all pred blocks *)
-			raise Implement_Me
-		| h1::h2::t -> (* Propagate to only predecessor of an instruction within a block *)
-			let out = li b i in
-			if out = lo b (i-1) then (li, lo)
-			else 
-				let lo = update_env lo b (i-1) out in
-				let li = raise Implement_Me in 
-				(li, lo) in
-	List.fold_left (fun (li, lo) b -> cl_block (li, lo) b (List.length b)) (livein, liveout) f
+	let rec prop_block (li, lo) b i =
+		match i with
+		  0 -> (li, lo)
+		| 1 -> 
+			(* From the first instruction, propagate to the last instructions of all pred blocks *)
+			let l = List.map (fun b -> (b, List.length b)) (pred b) in
+			List.fold_left (fun (li, lo) (b', i') -> prop li lo b i b' i') (li, lo) l
+		| _ -> 
+			(* Propagate to only predecessor of an instruction within a block *)
+			let (li, lo) = prop li lo b i b (i-1) in
+			prop_block (li, lo) b (i-1) in
+
+	List.fold_left (fun (li, lo) b -> prop_block (li, lo) b (List.length b)) (livein, liveout) f
 
 (*********************** Main Wrapper for all computations **********************)
 
@@ -134,29 +147,40 @@ let calc_live (livein : env) (liveout : env) (gen : env) (kill : env) (pred : bl
 let build_interfere_graph (f : func) : interfere_graph =
 	(* Update fnc to f; used globally throughout rest of calculation *)
 	let _ = (fnc := f) in
+
 	(* Construct graph of pred's and succ's between blocks *)
 	let pred = calc_block_graph f in
+
 	(* Calculate Gen's and kills of each instruction *)
 	let (gen, kill) = raise Implement_Me in
+
 	(* Calculate Live-In and Live-Out sets of each program instruction recursively *)
 	let rec liveloop li lo =
 		let (newli, newlo) = calc_live li lo gen kill pred in
 		if (newli, newlo) = (li, lo) then (li, lo)
 		else liveloop newli newlo in
-	let livein liveout = liveloop gen empty_env in
+	let (livein, liveout) = liveloop gen empty_env in
+
 	(* Calculate Interference Graph by running through instructions and adding all
 	   common live-in variables *)
-	let add_interfere ig b i = 
 	(* Take all pairs of vars in liveout b i and add them to ig *)
-    raise Implement_Me in
-	let rec add_interfere_block ig b =
-	raise Implement_Me in
+	let add_interfere ig b i = 
+		let vs = lo b i in
+		(* Fold over all pairs of distinct x, y: insert (x -- y) into ig *)	
+		VS.fold (fun x ig -> (VS.fold (fun y ig -> if x <> y then extend_ig ig x y) vs ig) vs ig in
+	(* Iterate over a block *)
+	let add_interfere_block ig b =
+		let rec h ig b i =
+			if i > 0 then
+				h (add_interfere ig b i) b i+1
+			else ig in
+		h ig b (List.length b) in
+	(* Iterate over the whole function *)
 	List.fold_left add_interfere_block empty_ig f
 
 (* given an interference graph, generate a string representing it *)
 let str_of_interfere_graph (g : interfere_graph) : string =
     raise Implement_Me
-
 
 (*******************************************************************)
 (* PS8 TODO:  graph-coloring, coalescing register assignment *)
