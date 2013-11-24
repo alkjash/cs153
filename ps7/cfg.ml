@@ -76,9 +76,9 @@ let get_vars ins : var list =
   | Label l -> []
   | Move (x,y) -> (extend_env gen 
 
-(* Recursively propagate Live-out sets of each instruction backwards;
+(* Do one iteration of propagating Live-out sets of each instruction backwards;
    if at beginning of a block, propagate to all predecessors *)
-let rec calc_live (livein : env) (liveout : env) : (env * env) =
+let calc_live (livein : env) (liveout : env) : (env * env) =
 	raise Implement_Me
 
 (* given a function (i.e., list of basic blocks), construct the
@@ -90,12 +90,14 @@ let build_interfere_graph (f : func) : interfere_graph =
 	let _ = (fnc := f) in
 	(* Construct graph of pred's and succ's between blocks *)
 	let pred = calc_block_graph f in
+	(* Calculate Gen's and kills of each instruction *)
+	let (gen, kill) = raise Implement_Me in
 	(* Calculate Live-In and Live-Out sets of each program instruction recursively *)
 	let rec liveloop li lo =
 		let newli, newlo = calc_live li lo in
 		if (newli, newlo) = (li, lo) then li lo
 		else liveloop newli newlo in
-	let livein liveout = liveloop empty_env empty_env
+	let livein liveout = liveloop gen empty_env
 	(* Calculate Interference Graph by running through instructions and adding all
 	   common live-in variables *)
 	let add_interfere ig b i = 
