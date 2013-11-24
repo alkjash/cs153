@@ -7,6 +7,8 @@ exception FatalError
 (*******************************************************************)
 (* PS7 TODO:  interference graph construction *)
 
+(******************* New Type Definitions **************************)
+
 (* We use sets instead of lists to avoid duplication and get easy union/intersection *)
 module VS = Set.Make(String)
 
@@ -21,6 +23,25 @@ let extend_ig ig x y =
 	else (fun z -> if z = x then VS.add y (ig x) else ig z)
 let empty_ig x = VS.empty
 
+(* Representation of pred and succ relations between blocks *)
+type block_graph = block -> block list 
+let extend_bg g b1 b2 =
+	if List.mem b2 (g b1) then g 
+	else (fun b -> if b = b1 then b2 :: (g b) else g b)
+let empty_bg b = []
+
+(* general type for storing set of vars associated with instructions - takes as input
+ * block and inst index within that block and outputs a set of vars *)
+type env = block -> int -> VS.t
+let extend_env e b i x =
+	let l = e b i in
+	if VS.mem x l then e
+	else (fun b' i' -> if (b' = b && i' = i) then VS.add x (e b i) else e b' i') 
+let update_env e b i s =
+	fun b' i' -> if (b' = b && i' = i) then s else e b' i'
+let empty_env b i = VS.empty
+
+(******************** Helper functions and definitions **************)
 (* Make whole fnc global for easy lookup *)
 let fnc = ref []
 
@@ -37,13 +58,6 @@ let btl (b : block) : label =
 	match List.hd b with
 	  Label l -> l
 	| _ -> raise FatalError
-
-(* Representation of pred and succ relations between blocks *)
-type block_graph = block -> block list 
-let extend_bg g b1 b2 =
-	if List.mem b2 (g b1) then g 
-	else (fun b -> if b = b1 then b2 :: (g b) else g b)
-let empty_bg b = []
 
 (* Helper function that adds in all the out-edges of a block to the pred graph *)
 let calc_out (pred : block_graph) (b : block) : block_graph = 
@@ -62,17 +76,7 @@ let calc_out (pred : block_graph) (b : block) : block_graph =
 let calc_block_graph (f : func) : block_graph =
 	List.fold_left calc_out empty_bg f
 
-(* general type for storing list of vars associated with instructions - takes as input
- * block and inst index within that block and outputs a list of vars *)
-type env = block -> int -> VS.t
-let extend_env e b i x =
-	let l = e b i in
-	if VS.mem x l then e
-	else (fun b' i' -> if (b' = b && i' = i) then VS.add x (e b i) else e b' i') 
-let update_env e b i s =
-	fun b' i' -> if (b' = b && i' = i) then s else e b' i'
-let empty_env b i = VS.empty
-
+(* Calculate gen(ins) *)
 let get_vars_gen (ins : inst) : VS.t =
   match ins with
   | Move (_, Var x) | Load (_, Var x, _) | Call (Var x) ->
@@ -85,6 +89,7 @@ let get_vars_gen (ins : inst) : VS.t =
 	| _ -> VS.empty)
   | _ -> VS.empty
 
+(* Calculate kill(ins) *)
 let get_vars_kill (ins : inst) : VS.t =
   match ins with
   | Move (Var x, _) -> VS.singleton x
@@ -92,6 +97,7 @@ let get_vars_kill (ins : inst) : VS.t =
   | Load (Var x, _, _) -> VS.singleton x
   | _ -> VS.empty
 
+(* Recurse through a block and update gen and kill for this block *)
 let rec calc_vars_b insts gen kill b i : (env * env) =
   match insts with
   | h::t -> calc_vars_b t (update_env gen b i (get_vars_gen h)) (update_env kill b i (get_vars_kill h)) b (i+1)
@@ -110,13 +116,16 @@ let calc_live (livein : env) (liveout : env) (gen : env) (kill : env) (pred : bl
 		  [] -> (li, lo)
 		| [h] -> (* Propagate to all pred blocks *)
 			raise Implement_Me
-		| h1::h2::t ->
+		| h1::h2::t -> (* Propagate to only predecessor of an instruction within a block *)
 			let out = li b i in
 			if out = lo b (i-1) then (li, lo)
 			else 
 				let lo = update_env lo b (i-1) out in
-				let li = raise Implement_Me in (li, lo) in
+				let li = raise Implement_Me in 
+				(li, lo) in
 	List.fold_left (fun (li, lo) b -> cl_block (li, lo) b (List.length b)) (livein, liveout) f
+
+(*********************** Main Wrapper for all computations **********************)
 
 (* given a function (i.e., list of basic blocks), construct the
  * interference graph for that function.  This will require that
