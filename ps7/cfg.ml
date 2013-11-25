@@ -16,12 +16,14 @@ module VS = Set.Make(String)
  * y such that x and y are live at the same point in time.  It's up to
  * you how you want to represent the graph.  
  * Implemented as a function which maps x to the list of variables 
- * live at some same point with it  *)
-type interfere_graph = var -> VS.t
-let extend_ig ig x y =
-	if VS.mem y (ig x) then ig
-	else (fun z -> if z = x then VS.add y (ig x) else ig z)
-let empty_ig x = VS.empty
+ * live at some same point with it  
+ * Keep a set of variables that appear at all within *)
+type interfere_graph = ((var -> VS.t) * VS.t)
+let extend_ig (ig : interfere_graph) (x : var) (y : var) : interfere_graph =
+	let edges = fst ig in
+	if VS.mem y (edges x) then ig
+	else ((fun z -> if z = x then VS.add y (edges x) else edges z), VS.add x (snd ig))
+let empty_ig = ((fun _ -> VS.empty), VS.empty)
 
 (* Representation of pred and succ relations between blocks *)
 type block_graph = block -> block list 
@@ -187,7 +189,12 @@ let build_interfere_graph (f : func) : interfere_graph =
 
 (* given an interference graph, generate a string representing it *)
 let str_of_interfere_graph (g : interfere_graph) : string =
-    raise Implement_Me
+	let ret = "graph interfere_graph {" in
+	let (edges, nodes) = g in
+	let add_edge str x y = str ^ "\n\t" ^ x ^ " -- " ^ y ^ ";\n" in
+	let add_all_edges x str =
+		VS.fold (fun y str -> add_edge str x y) (edges x) str in
+	(VS.fold add_all_edges nodes ret) ^ "}"
 
 (*******************************************************************)
 (* PS8 TODO:  graph-coloring, coalescing register assignment *)
