@@ -7,6 +7,23 @@ exception FatalError
 (*******************************************************************)
 (* PS7 TODO:  interference graph construction *)
 
+(******************* NOTES *****************************************)
+(* We only implement liveness analysis in the sense of the slides.
+   Thus for example in situations like
+   x := 1;
+   y := 2;
+   z := x;
+   Return;
+
+   x and y are not calculated to interfere, since y is always dead.
+   In order for register allocation to work out then, we will only
+   allocate registers at all when a variable is live; otherwise it
+   is pointless anyway. *)
+
+(* Our interference graph is implemented as a list of undirected edges;
+   however we plan to probably change to adjacency lists for the next
+   problem set; the switch is not difficult *)
+
 (******************* New Type Definitions **************************)
 
 (* We use sets instead of lists to avoid duplication and get easy union/intersection *)

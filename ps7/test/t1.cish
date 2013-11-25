@@ -3,3 +3,4 @@ main() {
 	b = 5;
 	return a + b;
 }
+/* Problematic Cish code - not using let; results in just x0-x9 pairwise interfering */

@@ -1,0 +1,6 @@
+main() {
+	let a = 4;
+	{let b = 5; {
+	return a;}}
+}
+/* In this case we think of a and b as not interfering - results in 12 variables all but one pair of which interfere */
