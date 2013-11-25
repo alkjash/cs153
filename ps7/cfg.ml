@@ -215,8 +215,6 @@ let reg_alloc (f : func) : func =
 let cfg_to_mips (f : func ) : Mips.inst list = 
     raise Implement_Me
 
-
-
 (*******************************************************************)
 (* Command-Line Interface for printing CFG. You probably will not 
     need to modify this for PS7, but will definitely need to for 
@@ -240,9 +238,7 @@ let print_interference_graph (():unit) (f : C.func) : unit =
   let graph = build_interfere_graph (fn2blocks f) in
   Printf.printf "%s\n%s\n\n" (C.fn2string f) (str_of_interfere_graph graph)
 
-(*
 let _ =
   let prog = parse_file() in
   List.fold_left print_interference_graph () prog
-*)
 
