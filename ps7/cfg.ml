@@ -100,8 +100,8 @@ let get_vars_kill (ins : inst) : VS.t =
 (* Recurse through a block and update gen and kill for this block *)
 let rec calc_vars_b insts gen kill i b : (env * env) =
   match insts with
-  | h::t -> calc_vars_b t (update_env gen i b (get_vars_gen h)) (update_env kill i b (get_vars_kill h)) (i+1) b
-  | _ -> (gen,kill)
+  | h::t -> calc_vars_b t (update_env gen b i (get_vars_gen h)) (update_env kill b i (get_vars_kill h)) (i+1) b
+  | [] -> (gen,kill)
 
 let rec calc_gen_kill (f : func) (e2 : (env * env)) : (env * env) =
   match f with
@@ -109,8 +109,6 @@ let rec calc_gen_kill (f : func) (e2 : (env * env)) : (env * env) =
     let gen,kill = e2 in
     calc_gen_kill t (calc_vars_b h gen kill 0 h)
   | [] -> e2
-  | _ -> raise FatalError
-
 
 (* Do one iteration of propagating Live-out sets of each instruction backwards;
    if at beginning of a block, propagate to all predecessors *)
@@ -128,7 +126,7 @@ let calc_live (livein : env) (liveout : env) (gen : env) (kill : env) (pred : bl
 		else (* Update lo and update li in accordance to that, taking into account gen's and kill's *)
 			let lo = update_env lo b' i' newlo in
 			let k = kill b' i' in
-			let newli = VS.union (gen b' i') (VS.filter (fun e -> !(VS.mem e k)) newlo) in
+			let newli = VS.union (gen b' i') (VS.filter (fun e -> not (VS.mem e k)) newlo) in
 			let li = update_env li b' i' newli in
 			(li, lo) in
 
@@ -161,7 +159,7 @@ let build_interfere_graph (f : func) : interfere_graph =
 	let pred = calc_block_graph f in
 
 	(* Calculate Gen's and kills of each instruction *)
-	let (gen, kill) = calc_gen_kill f (empty_env,empty_env) in
+	let (gen, kill) = calc_gen_kill f (empty_env, empty_env) in
   
 	(* Calculate Live-In and Live-Out sets of each program instruction recursively *)
 	let rec liveloop li lo =
@@ -171,17 +169,17 @@ let build_interfere_graph (f : func) : interfere_graph =
 	let (livein, liveout) = liveloop gen empty_env in
 
 	(* Calculate Interference Graph by running through instructions and adding all
-	   common live-in variables *)
+	   common live-out variables *)
 	(* Take all pairs of vars in liveout b i and add them to ig *)
 	let add_interfere ig b i = 
-		let vs = lo b i in
+		let vs = liveout b i in
 		(* Fold over all pairs of distinct x, y: insert (x -- y) into ig *)	
-		VS.fold (fun x ig -> (VS.fold (fun y ig -> if x <> y then extend_ig ig x y) vs ig) vs ig in
+		VS.fold (fun x ig -> (VS.fold (fun y ig -> if x <> y then extend_ig ig x y else ig) vs ig)) vs ig in
 	(* Iterate over a block *)
 	let add_interfere_block ig b =
 		let rec h ig b i =
 			if i > 0 then
-				h (add_interfere ig b i) b i+1
+				h (add_interfere ig b i) b (i+1)
 			else ig in
 		h ig b (List.length b) in
 	(* Iterate over the whole function *)
