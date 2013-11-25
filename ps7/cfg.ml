@@ -15,15 +15,12 @@ module VS = Set.Make(String)
 (* an interference graph maps a variable x to the set of variables that
  * y such that x and y are live at the same point in time.  It's up to
  * you how you want to represent the graph.  
- * Implemented as a function which maps x to the list of variables 
- * live at some same point with it  
- * Keep a set of variables that appear at all within *)
-type interfere_graph = ((var -> VS.t) * VS.t)
+ * Implemented as a list of edges x -- y *)
+type interfere_graph = (var * var) list
 let extend_ig (ig : interfere_graph) (x : var) (y : var) : interfere_graph =
-	let edges = fst ig in
-	if VS.mem y (edges x) then ig
-	else ((fun z -> if z = x then VS.add y (edges x) else edges z), VS.add x (snd ig))
-let empty_ig = ((fun _ -> VS.empty), VS.empty)
+	if List.mem (x, y) ig || List.mem (y, x) ig then ig
+	else (x, y) :: ig
+let empty_ig = []
 
 (* Representation of pred and succ relations between blocks *)
 type block_graph = block -> block list 
@@ -90,7 +87,7 @@ let calc_block_graph (f : func) : block_graph =
 (* Calculate gen(ins) *)
 let get_vars_gen (ins : inst) : VS.t =
   match ins with
-  | Move (_, Var x) | Load (_, Var x, _) | Call (Var x) ->
+  | Move (_, Var x) | Load (_, Var x, _) ->
 	VS.singleton x
   | Arith (_, x, _, y) | Store (x, _, y) | If (x, _, y, _, _) ->
 	(match x, y with
@@ -121,7 +118,7 @@ let rec calc_gen_kill (f : func) (e2 : (env * env)) : (env * env) =
     calc_gen_kill t (calc_vars_b h gen kill 0 h)
   | [] -> e2
 
-(* Do one iteration of propagating Live-out sets of each instruction backwards;
+(* Do one iteration of propagating Live sets of each instruction backwards;
    if at beginning of a block, propagate to all predecessors *)
 let calc_live (livein : env) (liveout : env) (gen : env) (kill : env) (pred : block_graph) 
 				: (env * env) =
@@ -183,14 +180,16 @@ let build_interfere_graph (f : func) : interfere_graph =
 	   common live-out variables *)
 	(* Take all pairs of vars in liveout b i and add them to ig *)
 	let add_interfere ig b i = 
+		let _ = print_int (List.length (VS.elements (gen b i))) in
 		let vs = liveout b i in
-		(* Fold over all pairs of distinct x, y: insert (x -- y) into ig *)	
+		let _ = print_int (List.length (VS.elements vs)) in
+		(* Fold over all pairs of distinct x, y in vs: insert (x -- y) into ig *)	
 		VS.fold (fun x ig -> (VS.fold (fun y ig -> if x <> y then extend_ig ig x y else ig) vs ig)) vs ig in
 	(* Iterate over a block *)
 	let add_interfere_block ig b =
 		let rec h ig b i =
 			if i > 0 then
-				h (add_interfere ig b i) b (i+1)
+				h (add_interfere ig b i) b (i-1)
 			else ig in
 		h ig b (List.length b) in
 	(* Iterate over the whole function *)
@@ -199,11 +198,8 @@ let build_interfere_graph (f : func) : interfere_graph =
 (* given an interference graph, generate a string representing it *)
 let str_of_interfere_graph (g : interfere_graph) : string =
 	let ret = "graph interfere_graph {" in
-	let (edges, nodes) = g in
 	let add_edge str x y = str ^ "\n\t" ^ x ^ " -- " ^ y ^ ";\n" in
-	let add_all_edges x str =
-		VS.fold (fun y str -> add_edge str x y) (edges x) str in
-	(VS.fold add_all_edges nodes ret) ^ "}"
+	(List.fold_left (fun str (x, y) -> add_edge str x y) ret g) ^ "}\n"
 
 (*******************************************************************)
 (* PS8 TODO:  graph-coloring, coalescing register assignment *)
