@@ -8,21 +8,14 @@ exception FatalError
 (* PS7 TODO:  interference graph construction *)
 
 (******************* NOTES *****************************************)
-(* We only implement liveness analysis in the sense of the slides.
-   Thus for example in situations like
-   x := 1;
-   y := 2;
-   z := x;
-   Return;
-
-   x and y are not calculated to interfere, since y is always dead.
-   In order for register allocation to work out then, we will only
-   allocate registers at all when a variable is live; otherwise it
-   is pointless anyway. *)
-
 (* Our interference graph is implemented as a list of undirected edges;
    however we plan to probably change to adjacency lists for the next
    problem set; the switch is not difficult *)
+
+(* We do not implement interference between variables and registers -
+   It may be more efficient to spill out callee-saved registers and
+   use them for register allocation, but we don't do this now; we only
+   use registers that are definitely available for clobbering *)
 
 (******************* New Type Definitions **************************)
 
@@ -197,7 +190,15 @@ let build_interfere_graph (f : func) : interfere_graph =
 	let add_interfere ig b i = 
 		let vs = liveout b i in
 		(* Fold over all pairs of distinct x, y in vs: insert (x -- y) into ig *)	
-		VS.fold (fun x ig -> (VS.fold (fun y ig -> if x <> y then extend_ig ig x y else ig) vs ig)) vs ig in
+		let ig = VS.fold (fun x ig -> 
+			(VS.fold (fun y ig -> if x <> y then extend_ig ig x y else ig) vs ig)) vs ig in
+		(* If the current instruction defines a (possibly dead) variable, 
+		   make it interfere with all live-out variables different from itself;
+		   this takes care of 0-length live ranges *)
+		match VS.elements (kill b i) with
+		  [x] -> VS.fold (fun y ig -> if x <> y then extend_ig ig x y else ig) vs ig
+		| _ -> ig in
+		
 	(* Iterate over a block *)
 	let add_interfere_block ig b =
 		let rec h ig b i =
