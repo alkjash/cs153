@@ -4,7 +4,7 @@
 # change to a different ocamlc if you prefer (e.g., ocamlopt)
 COMPILER=ocamlc
  
-all: clean cish cfg
+all: clean cish cfg test
 
 mips:
 	$(COMPILER) -c word32.ml
@@ -25,6 +25,9 @@ cfg: mips cish
 	$(COMPILER) -c cfg_ast.ml
 	$(COMPILER) -c cfg.ml
 	$(COMPILER) -o ps7_cfg cish_ast.cmo cish_lex.cmo cish_parse.cmo word32.cmo mips.cmo cfg_ast.cmo cfg.cmo
+
+test: cfg
+	$(COMPILER) -c test.ml
 
 clean:
 	-rm *.cmo *.cmi ps7_cfg cish_parse.ml cish_parse.mli cish_lex.ml 

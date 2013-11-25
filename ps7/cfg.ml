@@ -41,6 +41,15 @@ let extend_env e b i x =
 	else (fun b' i' -> if (b' = b && i' = i) then VS.add x (e b i) else e b' i') 
 let update_env e b i s =
 	fun b' i' -> if (b' = b && i' = i) then s else e b' i'
+let rec eq_env f e1 e2 b i =
+	if not (VS.equal (e1 b i) (e2 b i)) then false
+	else if i = List.length b then
+		match f with
+		  [] -> true
+		| h::t -> eq_env t e1 e2 h 1
+	else
+		eq_env f e1 e2 b (i+1)
+	
 let empty_env b i = VS.empty
 
 (******************** Helper functions and definitions **************)
@@ -166,7 +175,7 @@ let build_interfere_graph (f : func) : interfere_graph =
 	(* Calculate Live-In and Live-Out sets of each program instruction recursively *)
 	let rec liveloop li lo =
 		let (newli, newlo) = calc_live li lo gen kill pred in
-		if (newli, newlo) = (li, lo) then (li, lo)
+		if (eq_env f newli li (List.hd f) 1) && (eq_env f newlo lo (List.hd f) 1) then (li, lo)
 		else liveloop newli newlo in
 	let (livein, liveout) = liveloop gen empty_env in
 
@@ -239,8 +248,9 @@ let print_interference_graph (():unit) (f : C.func) : unit =
   let graph = build_interfere_graph (fn2blocks f) in
   Printf.printf "%s\n%s\n\n" (C.fn2string f) (str_of_interfere_graph graph)
 
+(*
 let _ =
   let prog = parse_file() in
   List.fold_left print_interference_graph () prog
-
+*)
 
