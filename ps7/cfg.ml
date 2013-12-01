@@ -256,7 +256,7 @@ let print_interference_graph (():unit) (f : C.func) : unit =
   let graph = build_interfere_graph (fn2blocks f) in
   Printf.printf "%s\n%s\n\n" (C.fn2string f) (str_of_interfere_graph graph)
 
-let _ =
+(* let _ =
   let prog = parse_file() in
   List.fold_left print_interference_graph () prog
-
+ *)

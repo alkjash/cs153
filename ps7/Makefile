@@ -28,6 +28,7 @@ cfg: mips cish
 
 test: cfg
 	$(COMPILER) -c test.ml
+	$(COMPILER) -c b1.ml
 
 clean:
 	-rm *.cmo *.cmi ps7_cfg cish_parse.ml cish_parse.mli cish_lex.ml 
