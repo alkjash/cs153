@@ -291,6 +291,7 @@ let rec compile_block (b : block) : Mips.inst list =
 		| If(x,cop,y,l1,l2) ->
 			match cop with
 			| Eq -> [Beq(x,y,l1);J(l2)]
+		| Return -> Jr(Mips.R31)
 
 (* Compile cfg down to mips, given it has no variables anymore *)
 let rec compile_cfg (f : func) : Mips.inst list =
