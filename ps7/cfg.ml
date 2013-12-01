@@ -253,15 +253,51 @@ let ig_to_iga (ig : interference_graph) : iga =
 		extend_iga (extend_iga g x y) y x in
 	List.fold_left add_edge empty_iga ig
 
+let make_stack (g : iga) (d : int) (vl : var list) : var list =
+	if d > 25 then raise Implement_Me
+	match g with
+	| [] -> vl
+	| _ ->
+		let els = (List.fold_left (fun l x ->
+			let x = (v,vl) in
+			if List.length(vl) = d then v::l else l) [] g) in
+		make_stack 
+
+
 let reg_alloc (f : func) : func = 
 	let ig = build_interference_graph f in
 	let g = ig_to_iga ig in
 	(* Color the variables and then replace *)
-	raise Implement_Me
+	let stack = make_stack g 0 [] in
+
+let rec compile_block (b : block) : Mips.inst list =
+	match b with
+	| h::t -> let minst =
+		match h with
+		| Label l -> [Label l]
+		| Move (x,y) -> [Add(x,y,Mips.R0)]
+		| Arith (x,y,op,z) ->
+			match op with
+			| Plus -> [Add(x,y,z)]
+			| Minus -> [Sub(x,y,z)]
+			| Times -> [Mul(x,y,z)]
+			| Div -> [Div(x,y,z)]
+		| Load (x,y,i) ->
+			[Lw(x,y,Word32.word(i))]
+		| Store (x,i,y) ->
+			[Sw(x,y,Word32.word(i))]
+		| Call f ->
+			[J(f)]
+		| If(x,cop,y,l1,l2) ->
+			match cop with
+			| Eq -> [Beq(x,y,l1);J(l2)]
 
 (* Compile cfg down to mips, given it has no variables anymore *)
 let rec compile_cfg (f : func) : Mips.inst list =
-	raise Implement_Me
+	match f with
+	| h::t -> (compile_block b) @ (compile_cfg t)
+	| [] -> []
+
 
 (* Finally, translate the output of reg_alloc to Mips instructions *)
 let cfg_to_mips (f : func) : Mips.inst list = 
