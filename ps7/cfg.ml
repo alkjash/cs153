@@ -226,12 +226,46 @@ let str_of_interfere_graph (g : interfere_graph) : string =
    function that doesn't use any variables (except for function
    names.)
 *)
-let reg_alloc (f : func) : func = 
-    raise Implement_Me
 
-(* Finally, translate the ouptut of reg_alloc to Mips instructions *)
-let cfg_to_mips (f : func ) : Mips.inst list = 
-    raise Implement_Me
+(* Adjacency-list form of interference graph: more useful for graph-coloring *)
+type iga = (var * (var list)) list
+let extend_iga (g : iga) (x : var) (y : var) : iga =
+	match List.filter (fun p -> fst p = x) with
+	  [(x, l)] -> 
+		if List.mem y l then g
+		(* clumsy *)
+		else List.map (fun p -> if (fst p = x) then (fst p, y :: (snd p)) else p) y 
+	| [] -> (x, [y]) :: l
+	| _ -> raise FatalError
+let empty_iga = []
+
+(* Map from variables to registers created by graph coloring *)
+type regmap = (var * Mips.reg) list
+let extend_rm rm x r =
+	if (List.exists (fun (y, _) -> y = x) rm) then rm
+	else (x, r) :: rm
+let empty_rm = []
+
+(* Convert interference_graph to iga *)
+let ig_to_iga (ig : interference_graph) : iga =
+	let add_edge (g : iga) (e : var * var) =
+		let (x, y) = e in
+		extend_iga (extend_iga g x y) y x in
+	List.fold_left add_edge empty_iga ig
+
+let reg_alloc (f : func) : func = 
+	let ig = build_interference_graph f in
+	let g = ig_to_iga ig in
+	(* Color the variables and then replace *)
+	raise Implement_Me
+
+(* Compile cfg down to mips, given it has no variables anymore *)
+let rec compile_cfg (f : func) : Mips.inst list =
+	raise Implement_Me
+
+(* Finally, translate the output of reg_alloc to Mips instructions *)
+let cfg_to_mips (f : func) : Mips.inst list = 
+	compile_cfg (reg_alloc f)
 
 (*******************************************************************)
 (* Command-Line Interface for printing CFG. You probably will not 
