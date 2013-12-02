@@ -227,6 +227,21 @@ let str_of_interfere_graph (g : interfere_graph) : string =
    function that doesn't use any variables (except for function
    names.)
 *)
+(* Adj-list of each block *)
+let rec block_move_interfere (b : block) (ig : interfere_graph) : ig =
+	match b with
+	| h::t ->
+		match h with
+		| Move (Var x, Var y) -> extend_ig ig x y
+		| _ -> block_move_interfere t ig
+	| _ -> ig
+
+
+(* Adjacency-list of move interference: for coalescing *)
+let rec build_move_interfere (f : func) (ig : interfere_graph) : ig =
+	match f with
+	| h::t -> (block_move_interfere h empty_ig) @ (build_move_interfere t ig)
+	| _ -> ig
 
 (* Adjacency-list form of interference graph: more useful for graph-coloring *)
 type iga = (var * (var list)) list
@@ -254,11 +269,13 @@ let ig_to_iga (ig : interference_graph) : iga =
 		extend_iga (extend_iga g x y) y x in
 	List.fold_left add_edge empty_iga ig
 
+(* Simplify iga by removing a node of lowest-degree *)
 let simplify (g : iga) (node : var) : iga =
 	let (v,adj) = node in 
 	(List.map (fun a -> let (va,vla) = a in (va,List.filter (fun n -> n<>v) vla))
 		(List.filter (fun x -> x<>node g)))
 
+(* Construct stack of variables to color *)
 let make_stack (g : iga) (vl : var list) : var list =
 	match g with
 	| [] -> vl
@@ -275,7 +292,7 @@ let reg_alloc (f : func) : func =
 	let ig = build_interference_graph f in
 	let g = ig_to_iga ig in
 	(* Color the variables and then replace *)
-	let stack = make_stack g 0 [] in
+	raise Implement_Me
 
 (* Compile one block down to mips *)
 let rec compile_block (b : block) : M.inst list =
