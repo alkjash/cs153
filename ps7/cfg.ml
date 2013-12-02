@@ -254,15 +254,21 @@ let ig_to_iga (ig : interference_graph) : iga =
 		extend_iga (extend_iga g x y) y x in
 	List.fold_left add_edge empty_iga ig
 
-let make_stack (g : iga) (d : int) (vl : var list) : var list =
-	if d > 25 then raise Implement_Me
+let simplify (g : iga) (node : var) : iga =
+	let (v,adj) = node in 
+	(List.map (fun a -> let (va,vla) = a in (va,List.filter (fun n -> n<>v) vla))
+		(List.filter (fun x -> x<>node g)))
+
+let make_stack (g : iga) (vl : var list) : var list =
 	match g with
 	| [] -> vl
-	| _ ->
-		let els = (List.fold_left (fun l x ->
-			let x = (v,vl) in
-			if List.length(vl) = d then v::l else l) [] g) in
-		make_stack 
+	| h::t ->
+		let node = (List.fold_left (fun a b ->
+			let a = (va,vla) in
+			let b = (vb,vlb) in
+			if List.length(vlb) < List.length(vla) then b else a) h t) in
+		let (v,_) = node in
+		make_stack (simplify g node) (v::vl)
 
 
 let reg_alloc (f : func) : func = 
