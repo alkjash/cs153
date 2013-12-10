@@ -1,6 +1,7 @@
 open Cfg_ast
 open Set
 module C = Cish_ast
+module M = Mips
 exception Implement_Me
 exception FatalError
 
@@ -240,7 +241,7 @@ let extend_iga (g : iga) (x : var) (y : var) : iga =
 let empty_iga = []
 
 (* Map from variables to registers created by graph coloring *)
-type regmap = (var * Mips.reg) list
+type regmap = (var * M.reg) list
 let extend_rm rm x r =
 	if (List.exists (fun (y, _) -> y = x) rm) then rm
 	else (x, r) :: rm
@@ -270,38 +271,47 @@ let reg_alloc (f : func) : func =
 	(* Color the variables and then replace *)
 	let stack = make_stack g 0 [] in
 
-let rec compile_block (b : block) : Mips.inst list =
+(* Compile one block down to mips *)
+let rec compile_block (b : block) : M.inst list =
 	match b with
-	| h::t -> let minst =
-		match h with
-		| Label l -> [Label l]
-		| Move (x,y) -> [Add(x,y,Mips.R0)]
-		| Arith (x,y,op,z) ->
-			match op with
-			| Plus -> [Add(x,y,z)]
-			| Minus -> [Sub(x,y,z)]
-			| Times -> [Mul(x,y,z)]
-			| Div -> [Div(x,y,z)]
+	  h::t -> (match h with
+		  Label l -> [M.Label l]
+		| Move (Reg x, Reg y) -> [M.Add(x, y, Reg M.R0)]
+		| Arith (Reg x, Reg y, op, Reg z) ->
+			(match op with
+			  Plus ->  [M.Add(x, y, Reg z)]
+			| Minus -> [M.Sub(x, y, z)]
+			| Times -> [M.Mul(x, y, z)]
+			| Div ->   [M.Div(x, y, z)])
+		| Arith (Reg x, Reg y, Add, Int z) ->
+		| Arith (Reg x, Int z, Add, Reg y) ->
+			[M.Add(x, y, Immed (Word32.word z))]
 		| Load (x,y,i) ->
-			[Lw(x,y,Word32.word(i))]
+			[M.Lw(x,y,Word32.word(i))]
 		| Store (x,i,y) ->
-			[Sw(x,y,Word32.word(i))]
+			[M.Sw(x,y,Word32.word(i))]
 		| Call f ->
-			[J(f)]
+			[M.J(f)]
 		| If(x,cop,y,l1,l2) ->
-			match cop with
-			| Eq -> [Beq(x,y,l1);J(l2)]
-		| Return -> Jr(Mips.R31)
+			(match cop with
+			  Eq ->  [M.Beq(x,y,l1); M.J(l2)]
+			| Neq -> [M.Bne(x,y,l1); M.J(l2)]
+			| Lt ->  [M.Blt(x,y,l1); M.J(l2)]
+			| Lte -> [M.Ble(x,y,l1); M.J(l2)]
+			| Gt ->  [M.Bgt(x,y,l1); M.J(l2)]
+			| Gte -> [M.Bge(x,y,l1); M.J(l2)])
+		| Return -> [M.Jr(ra)]
+		| _ -> raise FatalError) @ (compile_block t)
+	| [] -> []
 
 (* Compile cfg down to mips, given it has no variables anymore *)
-let rec compile_cfg (f : func) : Mips.inst list =
+let rec compile_cfg (f : func) : M.inst list =
 	match f with
 	| h::t -> (compile_block b) @ (compile_cfg t)
 	| [] -> []
 
-
 (* Finally, translate the output of reg_alloc to Mips instructions *)
-let cfg_to_mips (f : func) : Mips.inst list = 
+let cfg_to_mips (f : func) : M.inst list = 
 	compile_cfg (reg_alloc f)
 
 (*******************************************************************)
