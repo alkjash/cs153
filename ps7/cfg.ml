@@ -289,33 +289,29 @@ let rec build_move_graph (f : func) (g : iga) (ig : interfere_graph) : interfere
 (**************************** Data structures for register allocation ***********)
 
 (* A global environment for specific markings on nodes:
- * Each node is marked true or false depending on whether or not recommended to spill by spill
  * Each node x is marked None, Some x, or Some y, if it is not move-related, move-related,
  * and move-related and coalesced to y *)
-(* type mark = (var * (bool * var option)) list *)
+(* type mark = (var * var option) list *)
 let cur_mark = ref []
-(* Function to mark a variable as spill or to initialize it into mark *)
-let mark_spill (x : var) (b : bool) : unit =
+(* Function to initialize a variable into mark *)
+let mark_init (x : var) : unit =
 	match List.filter (fun y -> fst y = x) (!cur_mark) with
-	  [] -> (cur_mark := (x, (b, None)) :: (!cur_mark))
-	| _ -> 
-		cur_mark := List.map 
-		(fun (a1, (a2, a3)) -> if a1 = x then (a1, (b, a3)) else (a1, (a2, a3)))
-		(!cur_mark)
+	  [] -> (cur_mark := (x, None) :: (!cur_mark))
+	| _ -> ()
 (* Mark as move-related *)
 let mark_move (x : var) : unit =
-	cur_mark := List.map (fun (a1, (a2, a3)) -> if a1 = x then (a1, (a2, Some x)) else 
-		(a1, (a2, a3))) (!cur_mark)
+	cur_mark := List.map (fun (a1, a2) -> if a1 = x then (a1, Some x) else 
+		(a1, a2)) (!cur_mark)
 (* Mark x as coalesced with y *)
 let mark_coalesce (x : var) (y : var) : unit =
-	cur_mark := List.map (fun (a1, (a2, a3)) -> if a1 = x then (a1, (a2, Some y)) else 
-		(a1, (a2, a3))) (!cur_mark)
+	cur_mark := List.map (fun (a1, a2) -> if a1 = x then (a1, Some y) else 
+		(a1, a2)) (!cur_mark)
 (* Unmark all move operations that weren't already coalesced *)
 let mark_unmove_all() =
-	cur_mark := List.map (fun (a1, (a2, a3)) -> if a3 = Some a1 then (a1, (a2, None))
-		else (a1, (a2, a3))) (!cur_mark)
+	cur_mark := List.map (fun (a1, a2) -> if a2 = Some a1 then (a1, None)
+		else (a1, a2)) (!cur_mark)
 (* Lookup a variable *)
-let mark_lookup (x : var) : (bool * var option) =
+let mark_lookup (x : var) : var option =
 	match List.filter (fun y -> fst y = x) (!cur_mark) with
 	  [(x, p)] -> p
 	| _ -> raise FatalError
@@ -351,7 +347,7 @@ let rec simplify_loop (g : iga) : iga =
 	(* Compute the set of nodes *)
 	let vl = List.map fst g in
 	(* Filter out move-related nodes *)
-	let vl' = List.filter (fun x -> (snd (mark_lookup x) = None)) vl in
+	let vl' = List.filter (fun x -> mark_lookup x = None) vl in
 	
 	(* No more -> done *)
 	if vl' = [] then g else
@@ -405,7 +401,7 @@ let coalesce_loop (g : iga) (mg : interfere_graph) : (iga * interfere_graph) =
 let freeze (g : iga) (mg : interfere_graph) : (iga * interfere_graph) =
 	let vl = List.map fst g in
 	let check_node v =
-		(List.length (lookup_iga g v) < n_colors) && (snd (mark_lookup v) = Some v) in
+		(List.length (lookup_iga g v) < n_colors) && (mark_lookup v = Some v) in
 
 	match List.filter check_node vl with
 	  [] -> (g, mg) (* Failed to find a good node *)
@@ -415,7 +411,6 @@ let freeze (g : iga) (mg : interfere_graph) : (iga * interfere_graph) =
 		let mg = List.filter (fun (v1, v2) -> v1 <> node && v2 <> node) mg in
 		let _ = List.map (fun (x, y) -> (mark_move x; mark_move y)) mg in
 		(g, mg)
-	
 	
 (* Find the highest-degree node to remove and mark as potential spill *)
 let spill (g : iga) (mg : interfere_graph) : (iga * interfere_graph) =
@@ -433,7 +428,7 @@ let spill (g : iga) (mg : interfere_graph) : (iga * interfere_graph) =
 	
 	(* Push it onto stack and remove it from the graph *)
 	let _ = (cur_stack := node :: (!cur_stack)) in
-	let _ = mark_spill node true in
+	let _ = mark_init node in
 	let g = simplify g node in
 	let mg = List.filter (fun (x, y) -> x <> node && y <> node) mg in
 	(g, mg)
@@ -531,7 +526,13 @@ let apply_rm (f : func) (rm : regmap) =
 (* Insert prologue and epilogue instructions to extend stack for spilled variables *)
 let add_stack (f : func) =
 	let total = (!n_spill) * 4 in
-	raise Implement_Me
+	let prologue = List.hd f in
+	let h :: t = prologue in
+	let new_prologue =
+		h :: (Arith (sp, sp, Sub, Int total) :: t) in
+	let epilogue =
+		[Label 
+	
 
 (* Build an interference graph for f, color it, and then convert all variables to the registers
    they are attached to *)
@@ -550,7 +551,7 @@ let reg_alloc (f : func) : func =
 	   with at least one other, which is always true in this implementation of fn2blocks *)
 	let vl = List.map fst g in
 	(* Initialize mark by marking all vl as no-spill *)
-	let _ = List.map (fun x -> mark_spill x false) vl in
+	let _ = List.map (fun x -> mark_init x) vl in
 	(* Then mark all move-related nodes *)
 	let _ = List.map (fun (x, y) -> (mark_move x; mark_move y)) mg in
 
