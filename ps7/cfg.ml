@@ -20,7 +20,10 @@ exception FatalError
 
 (* Registers 2 3 and 4 are reserved to simplify matters; we reserve R2 for
    return values and 3 and 4 for storing immediates for operations where
-   immediates are allowed in cfg but not in mips *)
+   immediates are allowed in cfg but not in mips 
+   Register fp (R30) is reserved for spilling (this will probably be used frequently
+   in any case), and R3 and R4 are additionally used as temps for spilling; this allows
+   us to forego starting from scratch every time we spill a variable *)
 
 (******************* New Type Definitions **************************)
 
@@ -324,7 +327,21 @@ let cur_stack = ref []
 (* Number of registers allowed = one more than highest degree that can be simplified *)
 let n_colors = 24
 
-(* Remove a node of lowest-degree *)
+(* Color-to-register map *)
+let ctr (i : int) : M.reg =
+	match i with
+	  1 -> M.R5   | 2 -> M.R6   | 3 -> M.R7   | 4 -> M.R8   | 5 -> M.R9
+	| 6 -> M.R10  | 7 -> M.R11  | 8 -> M.R12  | 9 -> M.R13  | 10 -> M.R14
+	| 11 -> M.R15 | 12 -> M.R16 | 13 -> M.R17 | 14 -> M.R18 | 15 -> M.R19
+	| 16 -> M.R20 | 17 -> M.R21 | 18 -> M.R22 | 19 -> M.R23 | 20 -> M.R24
+	| 21 -> M.R25 | 22 -> M.R28 | 23 -> M.R29 | 24 -> M.R31
+	| _ -> M.R0
+
+(* Available colors *)
+let colors = [1; 2; 3; 4; 5; 6; 7; 8; 9; 10; 11; 12; 13; 14; 15; 16; 17; 18; 19; 20; 21; 22;
+	23; 24]
+
+(* Remove a node *)
 let simplify (g : iga) (node : var) : iga =
 	List.map (fun a -> let (va,vla) = a in (va, List.filter (fun n -> n <> node) vla))
 		(List.filter (fun x -> fst x <> node) g)
@@ -423,11 +440,26 @@ let spill (g : iga) (mg : interfere_graph) : (iga * interfere_graph) =
 
 (* Select: pop variables off stack and color, based on the original interference graph *)
 let select (g : iga) : var option * regmap =
-	raise Implement_Me
+	(* Coloring will be a function taking variables to the integers 1-n_colors *)
+	let coloring = fun x -> 0 in
+	let rec color stack coloring =
+		match stack with
+		  h::t -> 
+			let vl = lookup_iga g h in
+			let badcolors = List.map coloring vl in
+			let goodcolors = List.filter (fun c -> List.mem c badcolors) colors in
+			if goodcolors = [] then (Some h, coloring) 
+			else let c = List.hd goodcolors in
+				color t (fun x -> if x = h then c else coloring x)
+		| [] -> (None, coloring) in
+	let (v, coloring) = color (!cur_stack) coloring in
+	(* map through color-to-register translation *)
+	(v, fun i -> Some (ctr (coloring i)))
 
 (* Global variable: number of spills; this will be compiled into how much the stack pointer
  * needs to be shifted down *)
 let n_spill = ref 0
+
 let t1 = Reg(M.R3)
 let t2 = Reg(M.R4)
 
@@ -446,7 +478,7 @@ let apply_spill_inst (i : inst) (x : var) (offset : int) : inst list =
 	| Arith (o1, Var x, aop, o2) ->
 		[Load(t1, fp, offset); Arith (o1, t1, aop, o2)]
 	| Arith (o1, o2, aop, Var x) ->
-		[Load(t2, fp, offset); Arith (o1, o2, aop t2)]
+		[Load(t2, fp, offset); Arith (o1, o2, aop, t2)]
 	| Load (o, Var x, j) ->
 		[Load(t1, fp, offset); Load (o, t1, j)]
 	| Store (Var x, j, o) ->
@@ -462,11 +494,11 @@ let apply_spill_inst (i : inst) (x : var) (offset : int) : inst list =
 (* Apply a spill on variable x to f *)
 let apply_spill (f : func) (x : var) : func =
 	let _ = (n_spill := (!n_spill) + 1) in
-	let offset = 4 * n_spill in
+	let offset = 4 * !n_spill in
 	(* Apply spill to everything three times, since the same variable can show up up to 
 	three times in the same cfg instruction *)
-	List.map (fun b -> List.fold_left (fun l i -> (apply_spill_inst i x offset) @ l) [] b) f
-	List.map (fun b -> List.fold_left (fun l i -> (apply_spill_inst i x offset) @ l) [] b) f
+	let f = List.map (fun b -> List.fold_left (fun l i -> (apply_spill_inst i x offset) @ l) [] b) f in
+	let f = List.map (fun b -> List.fold_left (fun l i -> (apply_spill_inst i x offset) @ l) [] b) f in
 	List.map (fun b -> List.fold_left (fun l i -> (apply_spill_inst i x offset) @ l) [] b) f
 
 (* Apply a regmap to a single instruction *)
@@ -496,9 +528,18 @@ let apply_rm_inst (i : inst) (rm : regmap) =
 let apply_rm (f : func) (rm : regmap) =
 	List.map (fun b -> List.map (fun i -> apply_rm_inst i rm) b) f
 
+(* Insert prologue and epilogue instructions to extend stack for spilled variables *)
+let add_stack (f : func) =
+	let total = (!n_spill) * 4 in
+	raise Implement_Me
+
 (* Build an interference graph for f, color it, and then convert all variables to the registers
    they are attached to *)
-let rec reg_alloc (f : func) : func = 
+let reg_alloc (f : func) : func = 
+	(* Initialize everything for the algorithm, since will be running for multiple functions *)
+	let _ = (n_spill := 0) in
+	let _ = (cur_stack := []) in
+	let _ = (cur_mark := []) in
 	(* Build *)
 	let ig = build_interfere_graph f in
 	let orig = ig_to_iga ig in
@@ -544,15 +585,21 @@ let rec reg_alloc (f : func) : func =
 		loop g mg in
 
 	(* Run the whole loop *)
-	let (g, mg) = loop g mg in
+	let _ = loop g mg in
 
-	(* Select - start popping off stack and coloring/spilling *)
-	let (v, rm) = select orig in
-	match v with
-	  Some v1 -> (* v1 got spilled; rewrite f for the spill and recompute *)
-		reg_alloc (apply_spill f v1)
-	| None -> (* No spills; go ahead and replace every variable in f with rm of it *)
-		apply_rm f rm
+	(* Repeatedly spill and remove nodes until coloring is possible; then finish *)
+	(* No need to recompute entire reg_alloc body because we reserve extra registers
+	   for the sole purpose of these spilling operations *)
+	let rec select_loop f g =
+		(* Select - start popping off stack and coloring/spilling *)
+		let (v, rm) = select g in
+		match v with
+		  Some v1 -> (* v1 got spilled; remove it from stack and rewrite f for the spill and recompute *)
+			let _ = (cur_stack := List.filter (fun x -> x != v1) (!cur_stack)) in
+			select_loop (apply_spill f v1) (simplify g v1)
+		| None -> (* No spills; go ahead and replace every variable in f with rm of it *)
+			apply_rm f rm in
+	add_stack (select_loop f orig)
 
 (*************************** Post-regalloc compilation ************)
 (* Compile one block down to mips *)
