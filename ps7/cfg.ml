@@ -231,9 +231,9 @@ let str_of_interfere_graph (g : interfere_graph) : string =
 let rec block_move_graph (b : block) (ig : interfere_graph) : ig =
 	match b with
 	| h::t ->
-		match h with
+		(match h with
 		| Move (Var x, Var y) -> extend_ig ig x y
-		| _ -> block_move_graph t ig
+		| _ -> block_move_graph t ig)
 	| _ -> ig
 
 
@@ -246,12 +246,12 @@ let rec build_move_graph (f : func) (ig : interfere_graph) : ig =
 (* Adjacency-list form of interference graph: more useful for graph-coloring *)
 type iga = (var * (var list)) list
 let extend_iga (g : iga) (x : var) (y : var) : iga =
-	match List.filter (fun p -> fst p = x) with
+	match List.filter (fun p -> fst p = x) g with
 	  [(x, l)] -> 
 		if List.mem y l then g
 		(* clumsy *)
-		else List.map (fun p -> if (fst p = x) then (fst p, y :: (snd p)) else p) y 
-	| [] -> (x, [y]) :: l
+		else List.map (fun p -> if (fst p = x) then (fst p, y :: (snd p)) else p) g
+	| [] -> (x, [y]) :: g
 	| _ -> raise FatalError
 let empty_iga = []
 
@@ -263,7 +263,7 @@ let extend_rm rm x r =
 let empty_rm = []
 
 (* Convert interference_graph to iga *)
-let ig_to_iga (ig : interference_graph) : iga =
+let ig_to_iga (ig : interfere_graph) : iga =
 	let add_edge (g : iga) (e : var * var) =
 		let (x, y) = e in
 		extend_iga (extend_iga g x y) y x in
@@ -271,9 +271,9 @@ let ig_to_iga (ig : interference_graph) : iga =
 
 (* Simplify iga by removing a node of lowest-degree *)
 let simplify (g : iga) (node : var) : iga =
-	let (v,adj) = node in 
-	(List.map (fun a -> let (va,vla) = a in (va,List.filter (fun n -> n<>v) vla))
-		(List.filter (fun x -> x<>node g)))
+	let (v, adj) = (node,  in 
+	(List.map (fun a -> let (va,vla) = a in (va, List.filter (fun n -> n <> v) vla))
+		(List.filter (fun x -> x <> node g)))
 
 (* Coalesce moves to expose more possibilities for simplification *)
 let coalesce (g : iga) 
@@ -310,7 +310,7 @@ let rec compile_block (b : block) : M.inst list =
 			| Minus -> [M.Sub(x, y, z)]
 			| Times -> [M.Mul(x, y, z)]
 			| Div ->   [M.Div(x, y, z)])
-		| Arith (Reg x, Reg y, Add, Int z) ->
+		| Arith (Reg x, Reg y, Add, Int z)
 		| Arith (Reg x, Int z, Add, Reg y) ->
 			[M.Add(x, y, Immed (Word32.word z))]
 		| Load (x,y,i) ->
