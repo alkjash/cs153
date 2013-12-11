@@ -229,6 +229,8 @@ let str_of_interfere_graph (g : interfere_graph) : string =
 *)
 
 (* Adj-list of each block *)
+let K = 24
+
 let rec block_move_graph (b : block) (ig : interfere_graph) : ig =
 	match b with
 	| h::t ->
@@ -254,6 +256,7 @@ let extend_iga (g : iga) (x : var) (y : var) : iga =
 		else List.map (fun p -> if (fst p = x) then (fst p, y :: (snd p)) else p) g
 	| [] -> (x, [y]) :: g
 	| _ -> raise FatalError
+
 let lookup_iga (g : iga) (x : var) : var list =
 	match List.filter (fun p -> fst p = x) g with
 	  [(x, l)] -> l
@@ -282,11 +285,21 @@ let simplify (g : iga) (node : var) : iga =
 		(List.filter (fun x -> x <> node g)))
 
 (* Coalesce moves to expose more possibilities for simplification *)
-let coalesce (g : iga) 
+let coalesce (g : iga) (moves : interfere_graph) : iga =
+	match moves with
+	| h::t ->
+		let (v1,v2) = h in
+		let hdeg = List.length(lookup_iga g v1) + List.length(lookup_iga g v2) in
+		List.fold_left (fun a b ->
+			let (c,max) = a in 
+			let (bv1,bv2) = b in 
+			let cdeg = List.length(lookup_iga g bv1) + List.length(lookup_iga g bv2) in 
+			if cdeg > max && c_deg < K then
+			(b,cdeg) else a) (h,hdeg) moves
 
 
 (* Construct stack of variables to color *)
-let make_stack (g : iga) (vl : var list) : var list =
+let make_stack (g : iga) (vl : var list) (moves : interfere_graph): var list =
 	match g with
 	| [] -> vl
 	| h::t ->
@@ -294,8 +307,13 @@ let make_stack (g : iga) (vl : var list) : var list =
 			let a = (va,vla) in
 			let b = (vb,vlb) in
 			if List.length(vlb) < List.length(vla) then b else a) h t) in
-		let (v,_) = node in
-		make_stack (simplify g node) (v::vl)
+		let csg = (coalesce (simplify g node) moves) in 
+		if g = csg then 
+			(* freeze *)
+			raise Implement_Me
+		else 
+			let (v,_) = node in
+			make_stack csg (v::vl)
 
 (* Build an interference graph for f, color it, and then convert all variables to the registers
    they are attacked to *)
