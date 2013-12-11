@@ -253,6 +253,11 @@ let extend_iga (g : iga) (x : var) (y : var) : iga =
 		else List.map (fun p -> if (fst p = x) then (fst p, y :: (snd p)) else p) g
 	| [] -> (x, [y]) :: g
 	| _ -> raise FatalError
+let lookup_iga (g : iga) (x : var) : var list =
+	match List.filter (fun p -> fst p = x) g with
+	  [(x, l)] -> l
+	| [] -> []
+	| _ -> raise FatalError
 let empty_iga = []
 
 (* Map from variables to registers created by graph coloring *)
@@ -271,12 +276,14 @@ let ig_to_iga (ig : interfere_graph) : iga =
 
 (* Simplify iga by removing a node of lowest-degree *)
 let simplify (g : iga) (node : var) : iga =
-	let (v, adj) = (node,  in 
+	let (v, adj) = (node, lookup_iga g node)  in 
 	(List.map (fun a -> let (va,vla) = a in (va, List.filter (fun n -> n <> v) vla))
 		(List.filter (fun x -> x <> node g)))
 
 (* Coalesce moves to expose more possibilities for simplification *)
 let coalesce (g : iga) 
+
+
 (* Construct stack of variables to color *)
 let make_stack (g : iga) (vl : var list) : var list =
 	match g with
