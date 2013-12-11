@@ -687,7 +687,7 @@ let rec compile_block (b : block) (ep : M.label) (is_ep : bool) : M.inst list =
 			| Lte -> [M.Ble(x, y, l1); M.J(l2)]
 			| Gt ->  [M.Bgt(x, y, l1); M.J(l2)]
 			| Gte -> [M.Bge(x, y, l1); M.J(l2)])
-		| Return -> if is_ep then [M.Jr(M.R31)] else
+		| Return -> if is_ep then [M.Add(M.R3, M.R2, M.Reg(M.R0)); M.Jr(M.R31)] else
 			[M.J(ep)]
 		| Jump l -> [M.J(l)]
 		| _ -> raise Implement_Me) @ (compile_block t ep is_ep)
