@@ -227,6 +227,7 @@ let str_of_interfere_graph (g : interfere_graph) : string =
    function that doesn't use any variables (except for function
    names.)
 *)
+
 (* Adj-list of each block *)
 let rec block_move_graph (b : block) (ig : interfere_graph) : ig =
 	match b with
