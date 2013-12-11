@@ -256,8 +256,8 @@ let ig_to_iga (ig : interference_graph) : iga =
 
 let simplify (g : iga) (node : var) : iga =
 	let (v,adj) = node in 
-	(List.map (fun a -> let (va,vla) = a in (va,List.filter (fun n -> n<>v) vla))
-		(List.filter (fun x -> x<>node g)))
+	(List.map (fun a -> let (va,vla) = a in (va, List.filter (fun n -> n <> v) vla))
+		(List.filter (fun x -> x <> node g)))
 
 let make_stack (g : iga) (vl : var list) : var list =
 	match g with
