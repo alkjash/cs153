@@ -442,7 +442,7 @@ let select (g : iga) : var option * regmap =
 		  h::t -> 
 			let vl = lookup_iga g h in
 			let badcolors = List.map coloring vl in
-			let goodcolors = List.filter (fun c -> List.mem c badcolors) colors in
+			let goodcolors = List.filter (fun c -> not (List.mem c badcolors)) colors in
 			if goodcolors = [] then (Some h, coloring) 
 			else let c = List.hd goodcolors in
 				color t (fun x -> if x = h then c else coloring x)
@@ -527,12 +527,15 @@ let apply_rm (f : func) (rm : regmap) =
 let add_stack (f : func) =
 	let total = (!n_spill) * 4 in
 	let prologue = List.hd f in
-	let h :: t = prologue in
-	let prologue =
-		h :: (Arith (sp, sp, Sub, Int total) :: t) in
-	let Label l = h in
+	let prologue = match prologue with
+	  h::t ->
+		h :: (Arith (sp, sp, Minus, Int total) :: t)
+	| [] -> raise FatalError in
+	let l = match List.hd prologue with
+	  Label l -> l
+	| _ -> raise FatalError in
 	let epilogue =
-		[Label l ^ "_epilogue"; Arith(sp, sp, Add, Int total); Jr(M.R31)] in
+		[Label (l ^ "_epilogue"); Arith(sp, sp, Plus, Int total); Return] in
 	epilogue :: (prologue :: (List.tl f))
 
 (* Build an interference graph for f, color it, and then convert all variables to the registers
@@ -605,20 +608,43 @@ let reg_alloc (f : func) : func =
 
 (*************************** Post-regalloc compilation ************)
 (* Compile one block down to mips *)
-let rec compile_block (b : block) (ep : M.Label) : M.inst list =
+let rec compile_block (b : block) (ep : M.label) (is_ep : bool) : M.inst list =
 	match b with
 	  h::t -> (match h with
 		  Label l -> [M.Label l]
 		| Move (Reg x, Reg y) -> [M.Add(x, y, M.Reg M.R0)]
+		| Move (Reg x, Int y) -> [M.Add(x, R0, M.Immed (Word32.fromInt y))]
 		| Arith (Reg x, Reg y, op, Reg z) ->
 			(match op with
 			  Plus ->  [M.Add(x, y, M.Reg z)]
 			| Minus -> [M.Sub(x, y, z)]
 			| Times -> [M.Mul(x, y, z)]
 			| Div ->   [M.Div(x, y, z)])
-		| Arith (Reg x, Reg y, Plus, Int z)
-		| Arith (Reg x, Int z, Plus, Reg y) ->
-			[M.Add(x, y, M.Immed(Word32.fromInt z))]
+		| Arith (Reg x, Reg y, op, Int z) ->
+			(match op with
+			  Plus ->  [M.Add(x, y, M.Immed (Word32.fromInt z))]
+			| Minus -> [M.Add(M.R4, M.R0, M.Immed (Word32.fromInt z)); M.Sub(x, y, M.R4)]
+			| Times -> [M.Add(M.R4, M.R0, M.Immed (Word32.fromInt z)); M.Mul(x, y, M.R4)]
+			| Div -> [M.Add(M.R4, M.R0, M.Immed (Word32.fromInt z)); M.Div(x, y, M.R4)])
+		| Arith (Reg x, Int y, op, Reg z) ->
+			(match op with
+			  Plus ->  [M.Add(x, z, M.Immed (Word32.fromInt y))]
+			| Minus -> [M.Add(M.R3, M.R0, M.Immed (Word32.fromInt y)); M.Sub(x, M.R3, z)]
+			| Times -> [M.Add(M.R3, M.R0, M.Immed (Word32.fromInt y)); M.Mul(x, M.R3, z)]
+			| Div -> [M.Add(M.R3, M.R0, M.Immed (Word32.fromInt y)); M.Div(x, M.R3, z)])
+		| Arith (Reg x, Int y, op, Int z) ->
+			(match op with
+			  Plus ->  [M.Add(M.R4, M.R0, M.Immed (Word32.fromInt z)); 
+						M.Add(x, M.R4, M.Immed (Word32.fromInt y))]
+			| Minus -> [M.Add(M.R4, M.R0, M.Immed (Word32.fromInt z)); 
+					M.Add(M.R3, M.R0, M.Immed (Word32.fromInt y)); 
+					M.Sub(x, M.R3, M.R4)]
+			| Times -> [M.Add(M.R4, M.R0, M.Immed (Word32.fromInt z)); 
+					M.Add(M.R3, M.R0, M.Immed (Word32.fromInt y)); 
+					M.Mul(x, M.R3, M.R4)]
+			| Div -> [M.Add(M.R4, M.R0, M.Immed (Word32.fromInt z)); 
+					M.Add(M.R3, M.R0, M.Immed (Word32.fromInt y)); 
+					M.Div(x, M.R3, M.R4)])
 		| Load (Reg x, Reg y, i) ->
 			[M.Lw(x, y, Word32.fromInt i)]
 		| Store (Reg x, i, Reg y) ->
@@ -633,16 +659,19 @@ let rec compile_block (b : block) (ep : M.Label) : M.inst list =
 			| Lte -> [M.Ble(x, y, l1); M.J(l2)]
 			| Gt ->  [M.Bgt(x, y, l1); M.J(l2)]
 			| Gte -> [M.Bge(x, y, l1); M.J(l2)])
-		| Return -> [M.J(ep)]
-		| _ -> raise FatalError) @ (compile_block t)
+		| Return -> if is_ep then [M.Jr(M.R31)] else
+			[M.J(ep)]
+		| Jump l -> [M.J(l)]
+		| _ -> raise Implement_Me) @ (compile_block t ep is_ep)
 	| [] -> []
 
 (* Compile cfg down to mips, given it has no variables anymore *)
-let rec compile_cfg (f : func) : M.inst list =
-	let ep = List.hd (List.hd f) in
-	match f with
-	  h::t -> (compile_block h ep) @ (compile_cfg t)
-	| [] -> []
+let compile_cfg (f : func) : M.inst list =
+	let ep = match List.hd (List.hd f) with
+				Label l -> l
+			  | _ -> raise FatalError in
+	List.fold_left (fun p b -> (if b = List.hd f then (compile_block b ep true)
+			  					else (compile_block b ep false)) @ p) [] f
 
 (* Finally, translate the output of reg_alloc to Mips instructions *)
 let cfg_to_mips (f : func) : M.inst list = 
@@ -674,8 +703,8 @@ let print_interference_graph (():unit) (f : C.func) : unit =
 let print_mips (():unit) (f : func) : unit =
 	let out = List.map M.inst2string (cfg_to_mips f) in
 	let out = String.concat "\n" out in
-	Printf.printf out
+	print_string out
 
-let _ =
+let run() =
   let prog = parse_file() in
-  List.fold_left print_mips () (fn2blocks prog)
+  List.fold_left print_mips () (List.map fn2blocks prog)
