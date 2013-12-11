@@ -18,6 +18,10 @@ exception FatalError
    use them for register allocation, but we don't do this now; we only
    use registers that are definitely available for clobbering *)
 
+(* Registers 2 3 and 4 are reserved to simplify matters; we reserve R2 for
+   return values and 3 and 4 for storing immediates for operations where
+   immediates are allowed in cfg but not in mips *)
+
 (******************* New Type Definitions **************************)
 
 (* We use sets instead of lists to avoid duplication and get easy union/intersection *)
@@ -229,22 +233,6 @@ let str_of_interfere_graph (g : interfere_graph) : string =
 *)
 
 (*********************** Graph Data structures **************************)
-(* Adj-list of each block *)
-
-let rec block_move_graph (b : block) (ig : interfere_graph) : interfere_graph =
-	match b with
-	| h::t ->
-		(match h with
-		| Move (Var x, Var y) -> extend_ig ig x y
-		| _ -> block_move_graph t ig)
-	| _ -> ig
-
-(* Adjacency-list of moves: for coalescing *)
-let rec build_move_graph (f : func) (ig : interfere_graph) : interfere_graph =
-	match f with
-	| h::t -> (block_move_graph h empty_ig) @ (build_move_graph t ig)
-	| _ -> ig
-
 (* Adjacency-list form of interference graph: more useful for graph-coloring *)
 type iga = (var * (var list)) list
 let extend_iga (g : iga) (x : var) (y : var) : iga =
@@ -264,11 +252,10 @@ let lookup_iga (g : iga) (x : var) : var list =
 let empty_iga = []
 
 (* Map from variables to registers created by graph coloring *)
-type regmap = (var * M.reg) list
+type regmap = var -> (M.reg option)
 let extend_rm rm x r =
-	if (List.exists (fun (y, _) -> y = x) rm) then rm
-	else (x, r) :: rm
-let empty_rm = []
+	fun y -> if y = x then r else rm y
+let empty_rm x = None
 
 (* Convert interference_graph to iga *)
 let ig_to_iga (ig : interfere_graph) : iga =
@@ -276,6 +263,25 @@ let ig_to_iga (ig : interfere_graph) : iga =
 		let (x, y) = e in
 		extend_iga (extend_iga g x y) y x in
 	List.fold_left add_edge empty_iga ig
+
+(* Adj-list of each block *)
+let rec block_move_graph (b : block) (g : iga) (ig : interfere_graph) : interfere_graph =
+	match b with
+	  h::t ->
+		(match h with
+		  Move (Var x, Var y) -> 
+			if List.mem y (lookup_iga g x) then
+				block_move_graph t g ig
+			else 
+				block_move_graph t g (extend_ig ig x y)
+		| _ -> block_move_graph t g ig)
+	| [] -> ig
+
+(* Compute moves: for coalescing *)
+let rec build_move_graph (f : func) (g : iga) (ig : interfere_graph) : interfere_graph =
+	match f with
+	| h::t -> (block_move_graph h g empty_ig) @ (build_move_graph t g ig)
+	| _ -> ig
 
 (**************************** Data structures for register allocation ***********)
 
@@ -301,6 +307,10 @@ let mark_move (x : var) : unit =
 let mark_coalesce (x : var) (y : var) : unit =
 	cur_mark := List.map (fun (a1, (a2, a3)) -> if a1 = x then (a1, (a2, Some y)) else 
 		(a1, (a2, a3))) (!cur_mark)
+(* Unmark all move operations that weren't already coalesced *)
+let mark_unmove_all() =
+	cur_mark := List.map (fun (a1, (a2, a3)) -> if a3 = Some a1 then (a1, (a2, None))
+		else (a1, (a2, a3))) (!cur_mark)
 (* Lookup a variable *)
 let mark_lookup (x : var) : (bool * var option) =
 	match List.filter (fun y -> fst y = x) (!cur_mark) with
@@ -348,12 +358,22 @@ let rec simplify_loop (g : iga) : iga =
 let coalesce (g : iga) (e : var * var) : iga =
 	let (v1, v2) = e in
 	let (vl1, vl2) = (lookup_iga g v1, lookup_iga g v2) in
+
+	(* If one of the nodes is not in g (due to already being coalesced) fail *)
+	if vl1 = [] || vl2 = [] then
+		g
+	else
+
 	(* Filter out low-degree neighbors of v1 *)
 	let vl1' = List.filter (fun v -> List.length (lookup_iga g v) < n_colors) vl1 in
+
 	(* If vl1' is a subset of vl2, then go ahead and coalesce; otherwise fail *)
 	if List.map (fun v -> not (List.mem v vl2)) vl1' = [] then
 		let _ = mark_coalesce v1 v2 in
-		raise Implement_Me
+		(* Remove v1 from g *)
+		let g = simplify g v1 in
+		(* Insert the neighbors of v1 as neighbors of the new v2, the coalesced version *)
+		List.fold_left (fun g v -> extend_iga (extend_iga g v2 v) v v2) g vl1
 	else
 		g
 	
@@ -364,14 +384,126 @@ let coalesce_loop (g : iga) (mg : interfere_graph) : (iga * interfere_graph) =
 	let mg = raise Implement_Me in
 	(g, mg)
 
+(* Find a low-degree node that is move-related and freeze all move-related edges coming off it *)
+let freeze (g : iga) (mg : interfere_graph) : (iga * interfere_graph) =
+	let vl = List.map fst g in
+	let check_node v =
+		(List.length (lookup_iga g v) < n_colors) && (snd (mark_lookup v) = Some v) in
+
+	match List.filter check_node vl with
+	  [] -> (g, mg) (* Failed to find a good node *)
+	| node :: _ -> (* Freeze this node *)
+		(* Unmark everything, remove the edges related to node from mg, then remark the remainder *)
+		let _ = mark_unmove_all() in
+		let mg = List.filter (fun (v1, v2) -> v1 <> node && v2 <> node) mg in
+		let _ = List.map (fun (x, y) -> (mark_move x; mark_move y)) mg in
+		(g, mg)
+	
+	
+(* Find the highest-degree node to remove and mark as potential spill *)
+let spill (g : iga) (mg : interfere_graph) : (iga * interfere_graph) =
+	(* Compute the set of nodes *)
+	let vl = List.map fst g in
+	
+	(* No more -> done *)
+	if vl = [] then (g, mg) else
+
+	(* Find largest degree node *)
+	let node = (List.fold_left (fun a b ->
+		let vla = lookup_iga g a in
+		let vlb = lookup_iga g b in
+		if List.length(vlb) > List.length(vla) then b else a) (List.hd vl) (List.tl vl)) in
+	
+	(* Push it onto stack and remove it from the graph *)
+	let _ = (cur_stack := node :: (!cur_stack)) in
+	let _ = mark_spill node true in
+	let g = simplify g node in
+	let mg = List.filter (fun (x, y) -> x <> node && y <> node) mg in
+	(g, mg)
+
+(* Select: pop variables off stack and color, based on the original interference graph *)
+let select (g : iga) : var option * regmap =
+	raise Implement_Me
+
+(* Global variable: number of spills; this will be compiled into how much the stack pointer
+ * needs to be shifted down *)
+let n_spill = ref 0
+let t1 = Reg(M.R3)
+let t2 = Reg(M.R4)
+
+(* Apply a spill on x to a single instruction *)
+let apply_spill_inst (i : inst) (x : var) (offset : int) : inst list =
+	match i with
+		(* When defining x, instead load into temp (reserved R3 or R4) and store to stack *)
+	  Move (Var x, o) ->
+		[Move (t1, o); Store(fp, offset, t1)]
+	| Arith (Var x, o1, aop, o2) ->
+		[Arith (t1, o1, aop, o2); Store(fp, offset, t1)]
+	| Load (Var x, o, j) ->
+		[Load (t1, o, j); Store(fp, offset, t1)]
+	| Move (o, Var x) ->
+		[Load(t1, fp, offset); Move(o, t1)]
+	| Arith (o1, Var x, aop, o2) ->
+		[Load(t1, fp, offset); Arith (o1, t1, aop, o2)]
+	| Arith (o1, o2, aop, Var x) ->
+		[Load(t2, fp, offset); Arith (o1, o2, aop t2)]
+	| Load (o, Var x, j) ->
+		[Load(t1, fp, offset); Load (o, t1, j)]
+	| Store (Var x, j, o) ->
+		[Load(t1, fp, offset); Store (t1, j, o)]
+	| Store (o, j, Var x) ->
+		[Load(t2, fp, offset); Store (o, j, t2)]
+	| If (Var x, cop, o, l1, l2) ->
+		[Load(t1, fp, offset); If (t1, cop, o, l1, l2)]
+	| If (o, cop, Var x, l1, l2) ->
+		[Load(t2, fp, offset); If (o, cop, t2, l1, l2)]
+	| _ -> [i]
+
+(* Apply a spill on variable x to f *)
+let apply_spill (f : func) (x : var) : func =
+	let _ = (n_spill := (!n_spill) + 1) in
+	let offset = 4 * n_spill in
+	(* Apply spill to everything three times, since the same variable can show up up to 
+	three times in the same cfg instruction *)
+	List.map (fun b -> List.fold_left (fun l i -> (apply_spill_inst i x offset) @ l) [] b) f
+	List.map (fun b -> List.fold_left (fun l i -> (apply_spill_inst i x offset) @ l) [] b) f
+	List.map (fun b -> List.fold_left (fun l i -> (apply_spill_inst i x offset) @ l) [] b) f
+
+(* Apply a regmap to a single instruction *)
+let apply_rm_inst (i : inst) (rm : regmap) =
+	let orm o =
+		match o with
+		  Var v -> 
+			(match rm v with
+			  Some w -> Reg w
+			| None -> raise FatalError)
+		| _ -> o in
+
+	match i with
+	  Move (o1, o2) ->
+		Move (orm o1, orm o2)
+	| Arith (o1, o2, aop, o3) ->
+		Arith (orm o1, orm o2, aop, orm o3)
+	| Load (o1, o2, j) ->
+		Load (orm o1, orm o2, j)
+	| Store (o1, j, o2) ->
+		Store (orm o1, j, orm o2)
+	| If (o1, cop, o2, l1, l2) ->
+		If (orm o1, cop, orm o2, l1, l2)
+	| _ -> i
+
+(* Replace all variables in f by rm of it *)
+let apply_rm (f : func) (rm : regmap) =
+	List.map (fun b -> List.map (fun i -> apply_rm_inst i rm) b) f
+
 (* Build an interference graph for f, color it, and then convert all variables to the registers
    they are attached to *)
-let reg_alloc (f : func) : func = 
+let rec reg_alloc (f : func) : func = 
 	(* Build *)
 	let ig = build_interfere_graph f in
-	let g = ig_to_iga ig in
-	let mg = build_move_graph f empty_ig in
-	(* TODO: remove interfering edges from mg: we can't coalesce nodes that interfere *)
+	let orig = ig_to_iga ig in
+	let g = orig in
+	let mg = build_move_graph f orig empty_ig in
 
 	(* Compute list of variables that appear in graph: note, we assume all variables interfere
 	   with at least one other, which is always true in this implementation of fn2blocks *)
@@ -395,22 +527,32 @@ let reg_alloc (f : func) : func =
 	let rec loop2 g mg =
 		let (g, mg) = loop3 g mg in
 		(* Freeze - freeze one move-related edge *)
-		raise Implement_Me in
+		let (h, mh) = freeze g mg in
+		(* If no freeze occurred, stop *)
+		if (h, mh) = (g, mg) then
+			(g, mg)
+		else
+			loop2 h mh in
 
 	(* Run simplify/coalesce/freeze, then spill, then repeat *)
 	let rec loop g mg =
 		(* Check if done *)
 		if g = [] then (g, mg) else 
 		let (g, mg) = loop2 g mg in
-		(* Spill - pick the highest-degree vertex to spill *)
-		raise Implement_Me in
+		(* Spill - pick the highest-degree vertex to mark as potential spill *)
+		let (g, mg) = spill g mg in
+		loop g mg in
 
 	(* Run the whole loop *)
 	let (g, mg) = loop g mg in
 
 	(* Select - start popping off stack and coloring/spilling *)
-	raise Implement_Me
-	
+	let (v, rm) = select orig in
+	match v with
+	  Some v1 -> (* v1 got spilled; rewrite f for the spill and recompute *)
+		reg_alloc (apply_spill f v1)
+	| None -> (* No spills; go ahead and replace every variable in f with rm of it *)
+		apply_rm f rm
 
 (*************************** Post-regalloc compilation ************)
 (* Compile one block down to mips *)
