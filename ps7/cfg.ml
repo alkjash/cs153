@@ -687,6 +687,41 @@ let rec compile_block (b : block) (ep : M.label) (is_ep : bool) : M.inst list =
 			| Lte -> [M.Ble(x, y, l1); M.J(l2)]
 			| Gt ->  [M.Bgt(x, y, l1); M.J(l2)]
 			| Gte -> [M.Bge(x, y, l1); M.J(l2)])
+		| If(Reg x, cop, Int y, l1, l2) ->
+			(match cop with
+			  Eq ->  [M.Add(M.R4, M.R0, M.Immed (Word32.fromInt y)); M.Beq(x, M.R4, l1); M.J(l2)]
+			| Neq -> [M.Add(M.R4, M.R0, M.Immed (Word32.fromInt y)); M.Bne(x, M.R4, l1); M.J(l2)]
+			| Lt ->  [M.Add(M.R4, M.R0, M.Immed (Word32.fromInt y)); M.Blt(x, M.R4, l1); M.J(l2)]
+			| Lte -> [M.Add(M.R4, M.R0, M.Immed (Word32.fromInt y)); M.Ble(x, M.R4, l1); M.J(l2)]
+			| Gt ->  [M.Add(M.R4, M.R0, M.Immed (Word32.fromInt y)); M.Bgt(x, M.R4, l1); M.J(l2)]
+			| Gte -> [M.Add(M.R4, M.R0, M.Immed (Word32.fromInt y)); M.Bge(x, M.R4, l1); M.J(l2)])
+		| If(Int x, cop, Reg y, l1, l2) ->
+			(match cop with
+			  Eq ->  [M.Add(M.R3, M.R0, M.Immed (Word32.fromInt x)); M.Beq(M.R3, y, l1); M.J(l2)]
+			| Neq -> [M.Add(M.R3, M.R0, M.Immed (Word32.fromInt x)); M.Bne(M.R3, y, l1); M.J(l2)]
+			| Lt ->  [M.Add(M.R3, M.R0, M.Immed (Word32.fromInt x)); M.Blt(M.R3, y, l1); M.J(l2)]
+			| Lte -> [M.Add(M.R3, M.R0, M.Immed (Word32.fromInt x)); M.Ble(M.R3, y, l1); M.J(l2)]
+			| Gt ->  [M.Add(M.R3, M.R0, M.Immed (Word32.fromInt x)); M.Bgt(M.R3, y, l1); M.J(l2)]
+			| Gte -> [M.Add(M.R3, M.R0, M.Immed (Word32.fromInt x)); M.Bge(M.R3, y, l1); M.J(l2)])
+		| If(Int x, cop, Int y, l1, l2) ->
+			(match cop with
+			  Eq ->  [M.Add(M.R3, M.R0, M.Immed (Word32.fromInt x)); 
+					  M.Add(M.R4, M.R0, M.Immed (Word32.fromInt y));
+					  M.Beq(M.R3, M.R4, l1); M.J(l2)]
+			| Neq -> [M.Add(M.R3, M.R0, M.Immed (Word32.fromInt x)); 
+					  M.Add(M.R4, M.R0, M.Immed (Word32.fromInt y));
+					  M.Bne(M.R3, M.R4, l1); M.J(l2)]
+			| Lt ->  [M.Add(M.R3, M.R0, M.Immed (Word32.fromInt x)); 
+					  M.Blt(M.R3, M.R4, l1); M.J(l2)]
+			| Lte -> [M.Add(M.R3, M.R0, M.Immed (Word32.fromInt x)); 
+					  M.Add(M.R4, M.R0, M.Immed (Word32.fromInt y));
+					  M.Ble(M.R3, M.R4, l1); M.J(l2)]
+			| Gt ->  [M.Add(M.R3, M.R0, M.Immed (Word32.fromInt x)); 
+					  M.Add(M.R4, M.R0, M.Immed (Word32.fromInt y));
+					  M.Bgt(M.R3, M.R4, l1); M.J(l2)]
+			| Gte -> [M.Add(M.R3, M.R0, M.Immed (Word32.fromInt x)); 
+					  M.Add(M.R4, M.R0, M.Immed (Word32.fromInt y));
+					  M.Bge(M.R3, M.R4, l1); M.J(l2)])
 		| Return -> if is_ep then [M.Add(M.R3, M.R2, M.Reg(M.R0)); M.Jr(M.R31)] else
 			[M.J(ep)]
 		| Jump l -> [M.J(l)]
