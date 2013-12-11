@@ -264,7 +264,8 @@ let make_stack (g : iga) (d : int) (vl : var list) : var list =
 			if List.length(vl) = d then v::l else l) [] g) in
 		make_stack 
 
-
+(* Build an interference graph for f, color it, and then convert all variables to the registers
+   they are attacked to *)
 let reg_alloc (f : func) : func = 
 	let ig = build_interference_graph f in
 	let g = ig_to_iga ig in
