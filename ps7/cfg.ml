@@ -365,6 +365,19 @@ let rec simplify_loop (g : iga) : iga =
 	else
 		g
 
+(* Updates move graph with coalesced nodes *)
+let update_mg (mg : interfere_graph) (coalesced : interference_graph) : interfere_graph =
+	match coalesced with
+	| h::t ->
+		let (x,y) = h in (* get first pair of coalesced nodes *)
+		(* replace all x with y such that x is coalesed into y *)
+		update_mg t (List.map (fun a ->
+			let (v1,v2) = a in
+			if v1 = x then (y,v2)
+			else if v2 = x then (v1,y)
+			else a) mg)
+	| [] -> mg
+
 (* Coalesce one move v1 := v2; we use George's strategy: coalesce v1 into v2 if 
  * every high-degree neighbor of v1 in the interference graph is already a neighbor of
  * v2. *)
@@ -394,7 +407,12 @@ let coalesce (g : iga) (e : var * var) : iga =
 let coalesce_loop (g : iga) (mg : interfere_graph) : (iga * interfere_graph) =
 	let g = List.fold_left coalesce g mg in
 	(* After coalescing, recompute mg *)
-	let mg = List.filter (fun a -> let (x,y) = a in (mark_lookup x) <> Some y) mg in
+	let coalesed = List.filter (fun b -> let (w,z) = b in (mark_lookup w) = Some z)
+		(List.map (fun a ->
+			let (x,y) = a in
+			if (mark_lookup x) = Some y then a 
+			else if (mark_lookup y) = Some x then (y,x)) mg)
+	let mg = List.filter (fun (x,y) -> x <> y) (update_mg mg coalesced) in
 	(g, mg)
 
 (* Find a low-degree node that is move-related and freeze all move-related edges coming off it *)
