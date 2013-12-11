@@ -394,7 +394,7 @@ let coalesce (g : iga) (e : var * var) : iga =
 let coalesce_loop (g : iga) (mg : interfere_graph) : (iga * interfere_graph) =
 	let g = List.fold_left coalesce g mg in
 	(* After coalescing, recompute mg *)
-	let mg = raise Implement_Me in
+	let mg = List.filter (fun a -> let (x,y) = a in (mark_lookup x) <> Some y) mg in
 	(g, mg)
 
 (* Find a low-degree node that is move-related and freeze all move-related edges coming off it *)
