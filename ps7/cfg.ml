@@ -365,19 +365,6 @@ let rec simplify_loop (g : iga) : iga =
 	else
 		g
 
-(* Updates move graph with coalesced nodes *)
-let update_mg (mg : interfere_graph) (coalesced : interference_graph) : interfere_graph =
-	match coalesced with
-	| h::t ->
-		let (x,y) = h in (* get first pair of coalesced nodes *)
-		(* replace all x with y such that x is coalesed into y *)
-		update_mg t (List.map (fun a ->
-			let (v1,v2) = a in
-			if v1 = x then (y,v2)
-			else if v2 = x then (v1,y)
-			else a) mg)
-	| [] -> mg
-
 (* Coalesce one move v1 := v2; we use George's strategy: coalesce v1 into v2 if 
  * every high-degree neighbor of v1 in the interference graph is already a neighbor of
  * v2. *)
@@ -407,12 +394,14 @@ let coalesce (g : iga) (e : var * var) : iga =
 let coalesce_loop (g : iga) (mg : interfere_graph) : (iga * interfere_graph) =
 	let g = List.fold_left coalesce g mg in
 	(* After coalescing, recompute mg *)
-	let coalesed = List.filter (fun b -> let (w,z) = b in (mark_lookup w) = Some z)
-		(List.map (fun a ->
-			let (x,y) = a in
-			if (mark_lookup x) = Some y then a 
-			else if (mark_lookup y) = Some x then (y,x)) mg)
-	let mg = List.filter (fun (x,y) -> x <> y) (update_mg mg coalesced) in
+	let mg = List.map (fun a ->
+			let (x, y) = a in
+			match (mark_lookup x, mark_lookup y) with
+			  (Some x1, Some y1) -> (x1, y1)
+			| (Some x1, None) -> (x1, y)
+			| (None, Some y1) -> (x, y1)
+			| (None, None) -> (x,y)) mg in
+	let mg = List.filter (fun (x,y) -> x <> y) mg in
 	(g, mg)
 
 (* Find a low-degree node that is move-related and freeze all move-related edges coming off it *)
@@ -507,7 +496,7 @@ let apply_spill_inst (i : inst) (x : var) (offset : int) : inst list =
 (* Apply a spill on variable x to f *)
 let apply_spill (f : func) (x : var) : func =
 	let _ = (n_spill := (!n_spill) + 1) in
-	let offset = 4 * !n_spill in
+	let offset = -4 * (!n_spill + n_colors) in
 	(* Apply spill to everything three times, since the same variable can show up up to 
 	three times in the same cfg instruction *)
 	let f = List.map (fun b -> List.fold_left (fun l i -> (apply_spill_inst i x offset) @ l) [] b) f in
@@ -543,7 +532,7 @@ let apply_rm (f : func) (rm : regmap) =
 
 (* Insert prologue and epilogue instructions to extend stack for spilled variables *)
 let add_stack (f : func) =
-	let total = (!n_spill) * 4 in
+	let total = (!n_spill + n_colors) * 4 in
 	let prologue = List.hd f in
 	let prologue = match prologue with
 	  h::t ->
@@ -555,6 +544,26 @@ let add_stack (f : func) =
 	let epilogue =
 		[Label (l ^ "_epilogue"); Arith(sp, sp, Plus, Int total); Return] in
 	epilogue :: (prologue :: (List.tl f))
+
+(* Spill everything before call and pull it back after *)
+let compile_call (l : M.label) =
+	let rec unspill n lst =
+		if n > 0 then Load(Reg (ctr n), fp, -4 * n) :: (unspill (n-1) lst)
+		else lst in
+	let undo = (Call (Lab l)) :: (unspill n_colors []) in
+	let rec firstspill n lst =
+		if n > 0 then Store(fp, -4 * n, Reg (ctr n)) :: (firstspill (n-1) lst)
+		else lst in
+	firstspill n_colors undo
+
+(* Iterate compile_call over all func calls in f *)
+let compile_calls (f : func) =
+	let rec compile_call_block b = 
+		match b with
+		  (Call (Lab l)) :: t -> (compile_call l) @ (compile_call_block t)
+		| h::t -> h :: (compile_call_block t)
+		| [] -> [] in 
+	List.map compile_call_block f
 
 (* Build an interference graph for f, color it, and then convert all variables to the registers
    they are attached to *)
@@ -622,7 +631,8 @@ let reg_alloc (f : func) : func =
 			select_loop (apply_spill f v1) (simplify g v1)
 		| None -> (* No spills; go ahead and replace every variable in f with rm of it *)
 			apply_rm f rm in
-	add_stack (select_loop f orig)
+	let f = add_stack (select_loop f orig) in
+	compile_calls f
 
 (*************************** Post-regalloc compilation ************)
 (* Compile one block down to mips *)
@@ -631,7 +641,7 @@ let rec compile_block (b : block) (ep : M.label) (is_ep : bool) : M.inst list =
 	  h::t -> (match h with
 		  Label l -> [M.Label l]
 		| Move (Reg x, Reg y) -> [M.Add(x, y, M.Reg M.R0)]
-		| Move (Reg x, Int y) -> [M.Add(x, R0, M.Immed (Word32.fromInt y))]
+		| Move (Reg x, Int y) -> [M.Add(x, M.R0, M.Immed (Word32.fromInt y))]
 		| Arith (Reg x, Reg y, op, Reg z) ->
 			(match op with
 			  Plus ->  [M.Add(x, y, M.Reg z)]
@@ -666,7 +676,7 @@ let rec compile_block (b : block) (ep : M.label) (is_ep : bool) : M.inst list =
 		| Load (Reg x, Reg y, i) ->
 			[M.Lw(x, y, Word32.fromInt i)]
 		| Store (Reg x, i, Reg y) ->
-			[M.Sw(x, y, Word32.fromInt i)]
+			[M.Sw(y, x, Word32.fromInt i)]
 		| Call (Lab f) ->
 			[M.J(f)]
 		| If(Reg x, cop, Reg y, l1, l2) ->
@@ -721,8 +731,8 @@ let print_interference_graph (():unit) (f : C.func) : unit =
 let print_mips (():unit) (f : func) : unit =
 	let out = List.map M.inst2string (cfg_to_mips f) in
 	let out = String.concat "\n" out in
-	print_string out
+	print_string (out ^ "\n")
 
-let run() =
+let _ =
   let prog = parse_file() in
   List.fold_left print_mips () (List.map fn2blocks prog)
