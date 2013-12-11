@@ -528,11 +528,12 @@ let add_stack (f : func) =
 	let total = (!n_spill) * 4 in
 	let prologue = List.hd f in
 	let h :: t = prologue in
-	let new_prologue =
+	let prologue =
 		h :: (Arith (sp, sp, Sub, Int total) :: t) in
+	let Label l = h in
 	let epilogue =
-		[Label 
-	
+		[Label l ^ "_epilogue"; Arith(sp, sp, Add, Int total); Jr(M.R31)] in
+	epilogue :: (prologue :: (List.tl f))
 
 (* Build an interference graph for f, color it, and then convert all variables to the registers
    they are attached to *)
@@ -604,7 +605,7 @@ let reg_alloc (f : func) : func =
 
 (*************************** Post-regalloc compilation ************)
 (* Compile one block down to mips *)
-let rec compile_block (b : block) : M.inst list =
+let rec compile_block (b : block) (ep : M.Label) : M.inst list =
 	match b with
 	  h::t -> (match h with
 		  Label l -> [M.Label l]
@@ -632,14 +633,15 @@ let rec compile_block (b : block) : M.inst list =
 			| Lte -> [M.Ble(x, y, l1); M.J(l2)]
 			| Gt ->  [M.Bgt(x, y, l1); M.J(l2)]
 			| Gte -> [M.Bge(x, y, l1); M.J(l2)])
-		| Return -> [M.Jr(M.R31)]
+		| Return -> [M.J(ep)]
 		| _ -> raise FatalError) @ (compile_block t)
 	| [] -> []
 
 (* Compile cfg down to mips, given it has no variables anymore *)
 let rec compile_cfg (f : func) : M.inst list =
+	let ep = List.hd (List.hd f) in
 	match f with
-	  h::t -> (compile_block h) @ (compile_cfg t)
+	  h::t -> (compile_block h ep) @ (compile_cfg t)
 	| [] -> []
 
 (* Finally, translate the output of reg_alloc to Mips instructions *)
@@ -669,7 +671,11 @@ let print_interference_graph (():unit) (f : C.func) : unit =
   let graph = build_interfere_graph (fn2blocks f) in
   Printf.printf "%s\n%s\n\n" (C.fn2string f) (str_of_interfere_graph graph)
 
-(* let _ =
+let print_mips (():unit) (f : func) : unit =
+	let out = List.map M.inst2string (cfg_to_mips f) in
+	let out = String.concat "\n" out in
+	Printf.printf out
+
+let _ =
   let prog = parse_file() in
-  List.fold_left print_interference_graph () prog
- *)
+  List.fold_left print_mips () (fn2blocks prog)
