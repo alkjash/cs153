@@ -9,21 +9,24 @@ exception FatalError
 (* PS7 TODO:  interference graph construction *)
 
 (******************* NOTES *****************************************)
-(* Our interference graph is implemented as a list of undirected edges;
-   however we plan to probably change to adjacency lists for the next
-   problem set; the switch is not difficult *)
-
 (* We do not implement interference between variables and registers -
-   It may be more efficient to spill out callee-saved registers and
-   use them for register allocation, but we don't do this now; we only
-   use registers that are definitely available for clobbering *)
+   instead we make the following proxies:
+   - registers R2 R3 R4 R30 are not touched by register allocation at all
+   - When a call is made every caller-saves register is spilled temporarily
+		(this is usually only slightly more expensive than necessary)
+   - We assume that R31 is last assigned to by the temp that stores it, which
+   		we believe is true from the current implementation of fn2blocks *)
 
 (* Registers 2 3 and 4 are reserved to simplify matters; we reserve R2 for
    return values and 3 and 4 for storing immediates for operations where
-   immediates are allowed in cfg but not in mips 
+   immediates are allowed in cfg but not in mips (such as add and if)
    Register fp (R30) is reserved for spilling (this will probably be used frequently
    in any case), and R3 and R4 are additionally used as temps for spilling; this allows
-   us to forego starting from scratch every time we spill a variable *)
+   us to forego starting from scratch every time we spill a variable, since live
+   ranges of other variables don't change and we don't introduce any new temps. *)
+
+(* Our implementation has problems with spilling that we were unable to debug in time;
+   any time there are a large number of variables we encounter unknown fatal errors. *)
 
 (******************* New Type Definitions **************************)
 
@@ -330,7 +333,7 @@ let ctr (i : int) : M.reg =
 	| 6 -> M.R10  | 7 -> M.R11  | 8 -> M.R12  | 9 -> M.R13  | 10 -> M.R14
 	| 11 -> M.R15 | 12 -> M.R16 | 13 -> M.R17 | 14 -> M.R18 | 15 -> M.R19
 	| 16 -> M.R20 | 17 -> M.R21 | 18 -> M.R22 | 19 -> M.R23 | 20 -> M.R24
-	| 21 -> M.R25 | 22 -> M.R28 | 23 -> M.R29 | 24 -> M.R31
+	| 21 -> M.R25 | 22 -> M.R28 | 23  -> M.R29 | 24 -> M.R31
 	| _ -> M.R0
 
 (* Available colors *)
@@ -725,7 +728,7 @@ let rec compile_block (b : block) (ep : M.label) (is_ep : bool) : M.inst list =
 		| Return -> if is_ep then [M.Add(M.R3, M.R2, M.Reg(M.R0)); M.Jr(M.R31)] else
 			[M.J(ep)]
 		| Jump l -> [M.J(l)]
-		| _ -> raise Implement_Me) @ (compile_block t ep is_ep)
+		| _ -> raise FatalError) @ (compile_block t ep is_ep)
 	| [] -> []
 
 (* Compile cfg down to mips, given it has no variables anymore *)
@@ -768,6 +771,7 @@ let print_mips (():unit) (f : func) : unit =
 	let out = String.concat "\n" out in
 	print_string (out ^ "\n")
 
+(* Prints out mips of program *)
 let _ =
   let prog = parse_file() in
   List.fold_left print_mips () (List.map fn2blocks prog)
