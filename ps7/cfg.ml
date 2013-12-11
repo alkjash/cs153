@@ -228,8 +228,9 @@ let str_of_interfere_graph (g : interfere_graph) : string =
    names.)
 *)
 
+(*********************** Data structures **************************)
 (* Adj-list of each block *)
-let K = 24
+let k = 24
 
 let rec block_move_graph (b : block) (ig : interfere_graph) : ig =
 	match b with
@@ -238,7 +239,6 @@ let rec block_move_graph (b : block) (ig : interfere_graph) : ig =
 		| Move (Var x, Var y) -> extend_ig ig x y
 		| _ -> block_move_graph t ig)
 	| _ -> ig
-
 
 (* Adjacency-list of moves: for coalescing *)
 let rec build_move_graph (f : func) (ig : interfere_graph) : ig =
@@ -278,35 +278,47 @@ let ig_to_iga (ig : interfere_graph) : iga =
 		extend_iga (extend_iga g x y) y x in
 	List.fold_left add_edge empty_iga ig
 
+(************************* Coalescing register allocation ************)
+
+(* Represent stack as list of variables, marked with whether or not possible spill *)
+type stack = (var * bool) list
+let push_stack_nospill (s : stack) (v : var) : stack =
+	(v, false) :: s
+let push_stack_spill (s : stack) (v : var) : stack =
+	(v, true) :: s
+
+(* Keep a global stack; add to it whenever simplify succeeds *)
+let cur_stack = ref []
+
 (* Simplify iga by removing a node of lowest-degree *)
 let simplify (g : iga) (node : var) : iga =
-	let (v, adj) = (node, lookup_iga g node)  in 
-	(List.map (fun a -> let (va,vla) = a in (va, List.filter (fun n -> n <> v) vla))
-		(List.filter (fun x -> x <> node g)))
+	List.map (fun a -> let (va,vla) = a in (va, List.filter (fun n -> n <> node) vla))
+		(List.filter (fun x -> fst x <> node) g)
 
 (* Coalesce moves to expose more possibilities for simplification *)
 let coalesce (g : iga) (moves : interfere_graph) : iga =
 	match moves with
-	| h::t ->
-		let (v1,v2) = h in
+	  (v1, v2) :: t ->
 		let hdeg = List.length(lookup_iga g v1) + List.length(lookup_iga g v2) in
 		List.fold_left (fun a b ->
-			let (c,max) = a in 
-			let (bv1,bv2) = b in 
+			let (c, max) = a in 
+			let (bv1, bv2) = b in 
 			let cdeg = List.length(lookup_iga g bv1) + List.length(lookup_iga g bv2) in 
-			if cdeg > max && c_deg < K then
-			(b,cdeg) else a) (h,hdeg) moves
-
+			if cdeg > max && cdeg < k then
+			(b, cdeg) else a) (h, hdeg) moves
+	| [] -> g
 
 (* Construct stack of variables to color *)
-let make_stack (g : iga) (vl : var list) (moves : interfere_graph): var list =
+let rec make_stack (g : iga) (vl : var list) (moves : interfere_graph) : var list =
 	match g with
-	| [] -> vl
+	| [] -> vl (* Done *)
 	| h::t ->
+		(* Find smallest degree node *)
 		let node = (List.fold_left (fun a b ->
 			let a = (va,vla) in
 			let b = (vb,vlb) in
 			if List.length(vlb) < List.length(vla) then b else a) h t) in
+		(* Simplify if possible *)
 		let csg = (coalesce (simplify g node) moves) in 
 		if g = csg then 
 			(* freeze *)
@@ -316,14 +328,15 @@ let make_stack (g : iga) (vl : var list) (moves : interfere_graph): var list =
 			make_stack csg (v::vl)
 
 (* Build an interference graph for f, color it, and then convert all variables to the registers
-   they are attacked to *)
+   they are attached to *)
 let reg_alloc (f : func) : func = 
+	(* Build *)
 	let ig = build_interference_graph f in
 	let mg = build_move_graph f in
 	let g = ig_to_iga ig in
-	(* Color the variables and then replace *)
 	raise Implement_Me
 
+(*************************** Post-regalloc compilation ************)
 (* Compile one block down to mips *)
 let rec compile_block (b : block) : M.inst list =
 	match b with
